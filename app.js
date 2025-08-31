@@ -5,6 +5,7 @@ class SunMoonApp {
         this.timeCircle = null;
         this.currentData = null;
         this.matchingDayLength = null;
+        this.lastUpdateDate = null;
         
         this.init();
     }
@@ -39,18 +40,28 @@ class SunMoonApp {
             this.handleResize();
         });
         
-        // Update data periodically (every 5 minutes)
+        // Update data periodically (every hour, since astronomical data changes slowly)
         setInterval(() => {
             this.loadAstronomicalData();
-        }, 5 * 60 * 1000);
+        }, 60 * 60 * 1000); // 1 hour
+        
+        // Also check for date changes more frequently
+        setInterval(() => {
+            const currentDate = new Date().toDateString();
+            if (this.lastUpdateDate && this.lastUpdateDate !== currentDate) {
+                console.log('Date changed, refreshing astronomical data');
+                this.loadAstronomicalData();
+            }
+            this.lastUpdateDate = currentDate;
+        }, 10 * 60 * 1000); // Check every 10 minutes
     }
     
     initializeTimeCircle() {
         const container = document.getElementById('timeCircle');
         const containerRect = container.getBoundingClientRect();
         
-        // Make it responsive
-        const size = Math.min(containerRect.width || 600, window.innerHeight * 0.8, 600);
+        // Make it responsive - allow larger sizes
+        const size = Math.min(containerRect.width || 1000, window.innerHeight * 0.9, 1200);
         
         this.timeCircle = new TimeCircle('#timeCircle', {
             width: size,
@@ -118,6 +129,7 @@ class SunMoonApp {
         
         // Get next equinox/solstice
         this.nextEvent = this.calculations.getNextEquinoxOrSolstice();
+        console.log('Next equinox/solstice calculated:', this.nextEvent);
     }
     
     updateCenterDisplay() {
@@ -137,7 +149,7 @@ class SunMoonApp {
         
         this.timeCircle.centerInfo.append('text')
             .attr('class', 'current-time')
-            .attr('y', -80)
+            .attr('y', -50)
             .text(timeText);
         
         // Sun information
@@ -146,22 +158,8 @@ class SunMoonApp {
             
             this.timeCircle.centerInfo.append('text')
                 .attr('class', 'day-info')
-                .attr('y', -50)
+                .attr('y', -20)
                 .text(`☀️ ${dayLength ? dayLength.formatted : '---'}`);
-            
-            this.timeCircle.centerInfo.append('text')
-                .attr('class', 'day-info')
-                .attr('y', -30)
-                .text(`↑ ${this.currentData.sun.sunrise.toLocaleTimeString('en-US', { 
-                    hour12: false, hour: '2-digit', minute: '2-digit' 
-                })}`);
-            
-            this.timeCircle.centerInfo.append('text')
-                .attr('class', 'day-info')
-                .attr('y', -10)
-                .text(`↓ ${this.currentData.sun.sunset.toLocaleTimeString('en-US', { 
-                    hour12: false, hour: '2-digit', minute: '2-digit' 
-                })}`);
         }
         
         // Moon information
@@ -170,33 +168,36 @@ class SunMoonApp {
             
             this.timeCircle.centerInfo.append('text')
                 .attr('class', 'calculation-info')
-                .attr('y', 15)
-                .text(`${moonEmoji} ${Math.round(this.currentData.moon.illumination)}%`);
+                .attr('y', 5)
+                .text(`${moonEmoji} ${Math.round(this.currentData.moon.illumination)}% lit`);
         }
         
         // Next equinox/solstice
         if (this.nextEvent) {
+            console.log('Displaying next event in center:', this.nextEvent);
             this.timeCircle.centerInfo.append('text')
                 .attr('class', 'calculation-info')
-                .attr('y', 35)
+                .attr('y', 30)
                 .text(`${this.nextEvent.name}:`);
             
             this.timeCircle.centerInfo.append('text')
                 .attr('class', 'calculation-info')
-                .attr('y', 50)
+                .attr('y', 45)
                 .text(`${this.calculations.formatTimeUntilEvent(this.nextEvent.daysUntil)}`);
+        } else {
+            console.log('No next event found to display');
         }
         
         // Matching day length
         if (this.matchingDayLength) {
             this.timeCircle.centerInfo.append('text')
                 .attr('class', 'calculation-info')
-                .attr('y', 70)
+                .attr('y', 65)
                 .text(`Same day length:`);
             
             this.timeCircle.centerInfo.append('text')
                 .attr('class', 'calculation-info')
-                .attr('y', 85)
+                .attr('y', 80)
                 .text(`${this.matchingDayLength.date.toLocaleDateString('en-US', { 
                     month: 'short', 
                     day: 'numeric' 
@@ -301,7 +302,7 @@ class SunMoonApp {
         
         const container = document.getElementById('timeCircle');
         const containerRect = container.getBoundingClientRect();
-        const size = Math.min(containerRect.width || 600, window.innerHeight * 0.8, 600);
+        const size = Math.min(containerRect.width || 1000, window.innerHeight * 0.9, 1200);
         
         this.timeCircle.resize(size, size);
     }

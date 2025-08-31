@@ -1,11 +1,11 @@
 class TimeCircle {
     constructor(container, options = {}) {
         this.container = d3.select(container);
-        this.width = options.width || 600;
-        this.height = options.height || 600;
-        this.radius = Math.min(this.width, this.height) / 2 - 40;
-        this.innerRadius = this.radius * 0.4;
-        this.middleRadius = this.radius * 0.7;
+        this.width = options.width || 1000;
+        this.height = options.height || 1000;
+        this.radius = Math.min(this.width, this.height) / 2 - 60;
+        this.innerRadius = this.radius * 0.6;
+        this.middleRadius = this.radius * 0.75;
         this.outerRadius = this.radius * 0.95;
         
         this.svg = null;
@@ -33,6 +33,21 @@ class TimeCircle {
         this.moonData = null;
         
         this.init();
+    }
+    
+    // Helper function for smart text rotation
+    getTextRotation(angle) {
+        let rotation = angle * 180 / Math.PI; // Convert to degrees
+        
+        // If text would be upside down (90° to 270°), flip it
+        if (rotation > 90 && rotation < 270) {
+            rotation += 180; // Flip 180°
+        }
+        
+        // Normalize to 0-360 range
+        rotation = ((rotation % 360) + 360) % 360;
+        
+        return rotation;
     }
     
     init() {
@@ -208,7 +223,20 @@ class TimeCircle {
         this.sunLayer.append('path')
             .attr('d', dayArc)
             .attr('fill', 'url(#dayGradient)')
-            .attr('class', 'sun-arc day-arc');
+            .attr('class', 'sun-arc day-arc')
+            .style('cursor', 'pointer')
+            .on('mouseover', () => {
+                this.sunLayer.selectAll('.sunrise-label, .sunset-label')
+                    .transition()
+                    .duration(200)
+                    .attr('opacity', 1);
+            })
+            .on('mouseout', () => {
+                this.sunLayer.selectAll('.sunrise-label, .sunset-label')
+                    .transition()
+                    .duration(200)
+                    .attr('opacity', 0);
+            });
         
         // Night arc from sunset to sunrise (next day)
         const nightAngles = this.spanToAngles(sunsetHour, sunriseHour + 24);
@@ -217,7 +245,63 @@ class TimeCircle {
         this.sunLayer.append('path')
             .attr('d', nightArc)
             .attr('fill', 'url(#nightGradient)')
-            .attr('class', 'sun-arc night-arc');
+            .attr('class', 'sun-arc night-arc')
+            .style('cursor', 'pointer')
+            .on('mouseover', () => {
+                this.sunLayer.selectAll('.sunrise-label, .sunset-label')
+                    .transition()
+                    .duration(200)
+                    .attr('opacity', 1);
+            })
+            .on('mouseout', () => {
+                this.sunLayer.selectAll('.sunrise-label, .sunset-label')
+                    .transition()
+                    .duration(200)
+                    .attr('opacity', 0);
+            });
+        
+        // Add sunrise label ON the arc
+        const sunriseAngle = this.angleForTrig(sunriseHour);
+        const sunArcRadius = (this.innerRadius + this.middleRadius) / 2; // Center of sun arc
+        const sunriseX = Math.cos(sunriseAngle) * sunArcRadius;
+        const sunriseY = Math.sin(sunriseAngle) * sunArcRadius;
+        const sunriseRotation = this.getTextRotation(sunriseAngle);
+        
+        this.sunLayer.append('text')
+            .attr('class', 'arc-label sunrise-label')
+            .attr('x', sunriseX)
+            .attr('y', sunriseY)
+            .attr('text-anchor', 'middle')
+            .attr('dominant-baseline', 'central')
+            .attr('fill', 'rgba(255, 255, 255, 0.9)')
+            .attr('font-size', '13px')
+            .attr('font-weight', 'bold')
+            .attr('transform', `rotate(${sunriseRotation}, ${sunriseX}, ${sunriseY})`)
+            .attr('opacity', 0)  // Hidden by default - will show on hover
+            .text(`↑${this.sunData.sunrise.toLocaleTimeString('en-US', { 
+                hour12: false, hour: '2-digit', minute: '2-digit' 
+            })}`);
+        
+        // Add sunset label ON the arc
+        const sunsetAngle = this.angleForTrig(sunsetHour);
+        const sunsetX = Math.cos(sunsetAngle) * sunArcRadius;
+        const sunsetY = Math.sin(sunsetAngle) * sunArcRadius;
+        const sunsetRotation = this.getTextRotation(sunsetAngle);
+        
+        this.sunLayer.append('text')
+            .attr('class', 'arc-label sunset-label')
+            .attr('x', sunsetX)
+            .attr('y', sunsetY)
+            .attr('text-anchor', 'middle')
+            .attr('dominant-baseline', 'central')
+            .attr('fill', 'rgba(255, 255, 255, 0.9)')
+            .attr('font-size', '13px')
+            .attr('font-weight', 'bold')
+            .attr('transform', `rotate(${sunsetRotation}, ${sunsetX}, ${sunsetY})`)
+            .attr('opacity', 0)  // Hidden by default - will show on hover
+            .text(`↓${this.sunData.sunset.toLocaleTimeString('en-US', { 
+                hour12: false, hour: '2-digit', minute: '2-digit' 
+            })}`);
     }
     
     renderMoonArcs() {
@@ -229,7 +313,7 @@ class TimeCircle {
         console.log('Rendering moon arcs with data:', this.moonData);
         
         const arcGenerator = d3.arc()
-            .innerRadius(this.middleRadius + 5)
+            .innerRadius(this.middleRadius + 10)
             .outerRadius(this.outerRadius);
         
         // Clear previous moon arcs
@@ -248,7 +332,68 @@ class TimeCircle {
                 .attr('d', moonArc)
                 .attr('fill', 'url(#moonGradient)')
                 .attr('fill-opacity', this.moonData.illumination / 100)
-                .attr('class', 'moon-arc');
+                .attr('class', 'moon-arc')
+                .style('cursor', 'pointer')
+                .on('mouseover', () => {
+                    this.moonLayer.selectAll('.moonrise-label, .moonset-label')
+                        .transition()
+                        .duration(200)
+                        .attr('opacity', 1);
+                })
+                .on('mouseout', () => {
+                    this.moonLayer.selectAll('.moonrise-label, .moonset-label')
+                        .transition()
+                        .duration(200)
+                        .attr('opacity', 0);
+                });
+            
+            // Add moonrise label ON the arc if available
+            if (this.moonData.moonrise) {
+                const moonriseAngle = this.angleForTrig(moonriseHour);
+                const moonArcRadius = (this.middleRadius + 10 + this.outerRadius) / 2; // Middle of moon arc
+                const moonriseX = Math.cos(moonriseAngle) * moonArcRadius;
+                const moonriseY = Math.sin(moonriseAngle) * moonArcRadius;
+                const moonriseRotation = this.getTextRotation(moonriseAngle);
+                
+                this.moonLayer.append('text')
+                    .attr('class', 'arc-label moonrise-label')
+                    .attr('x', moonriseX)
+                    .attr('y', moonriseY)
+                    .attr('text-anchor', 'middle')
+                    .attr('dominant-baseline', 'central')
+                    .attr('fill', 'rgba(245, 245, 220, 0.9)')
+                    .attr('font-size', '12px')
+                    .attr('font-weight', 'bold')
+                    .attr('transform', `rotate(${moonriseRotation}, ${moonriseX}, ${moonriseY})`)
+                    .attr('opacity', 0)  // Hidden by default - will show on hover
+                    .text(`🌙↑${this.moonData.moonrise.toLocaleTimeString('en-US', { 
+                        hour12: false, hour: '2-digit', minute: '2-digit' 
+                    })}`);
+            }
+            
+            // Add moonset label ON the arc if available
+            if (this.moonData.moonset) {
+                const moonsetAngle = this.angleForTrig(moonsetHour);
+                const moonArcRadius = (this.middleRadius + 10 + this.outerRadius) / 2; // Middle of moon arc
+                const moonsetX = Math.cos(moonsetAngle) * moonArcRadius;
+                const moonsetY = Math.sin(moonsetAngle) * moonArcRadius;
+                const moonsetRotation = this.getTextRotation(moonsetAngle);
+                
+                this.moonLayer.append('text')
+                    .attr('class', 'arc-label moonset-label')
+                    .attr('x', moonsetX)
+                    .attr('y', moonsetY)
+                    .attr('text-anchor', 'middle')
+                    .attr('dominant-baseline', 'central')
+                    .attr('fill', 'rgba(245, 245, 220, 0.9)')
+                    .attr('font-size', '12px')
+                    .attr('font-weight', 'bold')
+                    .attr('transform', `rotate(${moonsetRotation}, ${moonsetX}, ${moonsetY})`)
+                    .attr('opacity', 0)  // Hidden by default - will show on hover
+                    .text(`🌙↓${this.moonData.moonset.toLocaleTimeString('en-US', { 
+                        hour12: false, hour: '2-digit', minute: '2-digit' 
+                    })}`);
+            }
         }
     }
     
@@ -256,83 +401,28 @@ class TimeCircle {
         const now = new Date();
         const currentHour = now.getHours() + now.getMinutes() / 60 + now.getSeconds() / 3600;
         
-        // Update time hand
+        // Update time hand - clear all previous elements thoroughly
         this.timeLayer.selectAll('*').remove();
         
         const angle = this.angleForTrig(currentHour); // Use standard trig for time hand
-        const x = Math.cos(angle) * (this.outerRadius - 5);
-        const y = Math.sin(angle) * (this.outerRadius - 5);
+        const innerX = Math.cos(angle) * this.innerRadius;
+        const innerY = Math.sin(angle) * this.innerRadius;
+        const outerX = Math.cos(angle) * this.outerRadius;
+        const outerY = Math.sin(angle) * this.outerRadius;
         
         this.timeLayer.append('line')
             .attr('class', 'time-hand')
-            .attr('x1', 0)
-            .attr('y1', 0)
-            .attr('x2', x)
-            .attr('y2', y);
+            .attr('x1', innerX)
+            .attr('y1', innerY)
+            .attr('x2', outerX)
+            .attr('y2', outerY);
         
-        // Update center information
-        this.updateCenterInfo(now);
+        // Center info is now handled by app.js - don't update here
     }
     
+    // This method is deprecated - center info is now handled by app.js
     updateCenterInfo(now) {
-        this.centerInfo.selectAll('*').remove();
-        
-        // Current time
-        const timeText = now.toLocaleTimeString('en-US', { 
-            hour12: false, 
-            hour: '2-digit', 
-            minute: '2-digit' 
-        });
-        
-        this.centerInfo.append('text')
-            .attr('class', 'current-time')
-            .attr('y', -40)
-            .text(timeText);
-        
-        // Day info
-        if (this.sunData) {
-            const dayLength = this.calculateDayLength();
-            const dayLengthText = `Day: ${dayLength}`;
-            
-            this.centerInfo.append('text')
-                .attr('class', 'day-info')
-                .attr('y', -15)
-                .text(dayLengthText);
-            
-            const sunriseText = `↑ ${this.sunData.sunrise.toLocaleTimeString('en-US', { 
-                hour12: false, 
-                hour: '2-digit', 
-                minute: '2-digit' 
-            })}`;
-            
-            this.centerInfo.append('text')
-                .attr('class', 'day-info')
-                .attr('y', 5)
-                .text(sunriseText);
-            
-            const sunsetText = `↓ ${this.sunData.sunset.toLocaleTimeString('en-US', { 
-                hour12: false, 
-                hour: '2-digit', 
-                minute: '2-digit' 
-            })}`;
-            
-            this.centerInfo.append('text')
-                .attr('class', 'day-info')
-                .attr('y', 25)
-                .text(sunsetText);
-        }
-        
-        // Moon info
-        if (this.moonData) {
-            const moonPhaseText = `🌙 ${Math.round(this.moonData.illumination)}%`;
-            
-            this.centerInfo.append('text')
-                .attr('class', 'calculation-info')
-                .attr('y', 50)
-                .text(moonPhaseText);
-        }
-        
-        // Additional calculations will be added here
+        // No longer used - prevents conflicts with app.js updateCenterDisplay
     }
     
     calculateDayLength() {
@@ -355,9 +445,9 @@ class TimeCircle {
     resize(width, height) {
         this.width = width;
         this.height = height;
-        this.radius = Math.min(this.width, this.height) / 2 - 40;
-        this.innerRadius = this.radius * 0.4;
-        this.middleRadius = this.radius * 0.7;
+        this.radius = Math.min(this.width, this.height) / 2 - 60;
+        this.innerRadius = this.radius * 0.6;
+        this.middleRadius = this.radius * 0.75;
         this.outerRadius = this.radius * 0.95;
         
         this.svg

@@ -4,6 +4,7 @@ class AstronomicalAPI {
         this.userLocation = this.loadUserLocation();
         this.cache = new Map();
         this.cacheTimeout = 6 * 60 * 60 * 1000; // 6 hours in ms
+        this.dailyCache = new Map(); // Cache astronomical data per day
     }
     
     setApiKey(apiKey) {
@@ -228,15 +229,38 @@ class AstronomicalAPI {
     async getExtendedAstronomicalData() {
         try {
             const today = new Date();
+            const dateKey = today.toDateString(); // e.g., "Sat Aug 31 2025"
+            
+            // Check daily cache first
+            const cachedData = this.dailyCache.get(dateKey);
+            if (cachedData) {
+                console.log('Using cached daily astronomical data for:', dateKey);
+                return cachedData;
+            }
+            
+            console.log('Fetching fresh astronomical data for:', dateKey);
             const sunData = await this.getSunData(today);
             const moonData = await this.getMoonData(today);
             
-            return {
+            const data = {
                 sun: sunData,
                 moon: moonData,
                 location: await this.getCurrentLocation(),
                 lastUpdate: new Date()
             };
+            
+            // Cache the data for the day
+            this.dailyCache.set(dateKey, data);
+            
+            // Clean up old cache entries (keep only last 3 days)
+            const keys = Array.from(this.dailyCache.keys());
+            if (keys.length > 3) {
+                const oldestKey = keys[0];
+                this.dailyCache.delete(oldestKey);
+                console.log('Removed old cached data for:', oldestKey);
+            }
+            
+            return data;
         } catch (error) {
             console.error('Failed to fetch astronomical data:', error);
             throw error;
