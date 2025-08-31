@@ -487,14 +487,15 @@ class AstronomicalAPI {
         return filteredGroups;
     }
     
-    getFallbackUVData() {
+    getFallbackUVData(date = new Date()) {
         // Simple fallback UV data - assumes moderate UV during daylight hours
-        const now = new Date();
+        const baseDate = new Date(date);
         const hourly = [];
         
         // Generate 24 hours of fallback UV data
         for (let i = 0; i < 24; i++) {
-            const hour = new Date(now.getTime() + (i * 60 * 60 * 1000));
+            const hour = new Date(baseDate);
+            hour.setHours(i, 0, 0, 0);
             const hourOfDay = hour.getHours();
             
             let uvValue = 0;
@@ -516,11 +517,11 @@ class AstronomicalAPI {
         const grouped = this.groupUVDataByIndex(hourly.filter(h => h.uv > 0));
         
         return {
-            current: hourly.find(h => h.hour === now.getHours())?.uv || 0,
+            current: hourly.find(h => h.hour === baseDate.getHours())?.uv || 0,
             hourly: hourly,
             grouped: grouped, // Add grouped fallback data
             daily: [{
-                date: now,
+                date: baseDate,
                 maxUv: Math.max(...hourly.map(h => h.uv))
             }]
         };
@@ -569,6 +570,56 @@ class AstronomicalAPI {
             return data;
         } catch (error) {
             console.error('Failed to fetch astronomical data:', error);
+            throw error;
+        }
+    }
+    
+    /**
+     * Get extended astronomical data for a specific date
+     */
+    async getExtendedAstronomicalDataForDate(date) {
+        try {
+            const dateKey = date.toDateString(); // e.g., "Sat Aug 31 2025"
+            
+            // Check daily cache first
+            const cachedData = this.dailyCache.get(dateKey);
+            if (cachedData) {
+                console.log('Using cached daily astronomical data for:', dateKey);
+                return cachedData;
+            }
+            
+            console.log('Fetching fresh astronomical data for:', dateKey);
+            const sunData = await this.getSunData(date);
+            const moonData = await this.getMoonData(date);
+            
+            // For historical dates, we can't get UV forecast, so use fallback
+            const uvData = await this.getFallbackUVData(date);
+            
+            const data = {
+                sun: sunData,
+                moon: moonData,
+                uv: uvData,
+                location: await this.getCurrentLocation(),
+                lastUpdate: new Date(),
+                selectedDate: date
+            };
+            
+            // Cache the data for the day
+            this.dailyCache.set(dateKey, data);
+            
+            // Clean up old cache entries (keep only last 10 days for historical data)
+            const keys = Array.from(this.dailyCache.keys());
+            if (keys.length > 10) {
+                // Remove oldest entries beyond 10
+                keys.slice(0, keys.length - 10).forEach(key => {
+                    this.dailyCache.delete(key);
+                });
+                console.log('Cleaned up old cached data, keeping last 10 entries');
+            }
+            
+            return data;
+        } catch (error) {
+            console.error('Failed to fetch astronomical data for date:', date, error);
             throw error;
         }
     }

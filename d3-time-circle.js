@@ -7,6 +7,7 @@ class TimeCircle {
         this.innerRadius = this.radius * AppConfig.VISUALIZATION.RADIUS_RATIOS.INNER;
         this.middleRadius = this.radius * AppConfig.VISUALIZATION.RADIUS_RATIOS.MIDDLE;
         this.outerRadius = this.radius * AppConfig.VISUALIZATION.RADIUS_RATIOS.OUTER;
+        this.yearRadius = this.radius * AppConfig.VISUALIZATION.RADIUS_RATIOS.YEAR;
         
         this.svg = null;
         this.g = null;
@@ -33,6 +34,9 @@ class TimeCircle {
         this.moonData = null;
         this.uvData = null;
         this.updateIntervalId = null;
+        this.selectedDate = new Date(); // Currently selected date
+        this.onDateChange = null; // Callback for date changes
+        this.yearRotation = 0; // Current rotation angle of the year dial
         
         this.init();
     }
@@ -201,8 +205,11 @@ class TimeCircle {
         this.sunLayer = this.g.append('g').attr('class', 'sun-layer');
         this.moonLayer = this.g.append('g').attr('class', 'moon-layer');
         this.uvLayer = this.g.append('g').attr('class', 'uv-layer'); // UV layer after moon layer for proper z-ordering
+        this.yearLayer = this.g.append('g').attr('class', 'year-layer');
         this.timeLayer = this.g.append('g').attr('class', 'time-layer');
         this.centerInfo = this.g.append('g').attr('class', 'center-info');
+        
+        this.createYearCircle();
     }
     
     updateSunData(sunData) {
@@ -374,11 +381,15 @@ class TimeCircle {
             const moonAngles = this.spanToAngles(moonriseHour, moonsetHour);
             const moonArc = arcGenerator(moonAngles);
             
+            // Check if this is current date for styling
+            const isCurrentDate = this.selectedDate.toDateString() === new Date().toDateString();
+            
             this.moonLayer.append('path')
                 .attr('d', moonArc)
                 .attr('fill', 'url(#moonGradient)')
                 .attr('fill-opacity', this.moonData.illumination / 100)
                 .attr('class', 'moon-arc')
+                .attr('stroke-dasharray', isCurrentDate ? 'none' : '5,3')
                 .style('cursor', 'pointer')
                 .on('mouseover', () => {
                     this.moonLayer.selectAll('.moonrise-label, .moonset-label')
@@ -500,6 +511,7 @@ class TimeCircle {
         this.innerRadius = this.radius * AppConfig.VISUALIZATION.RADIUS_RATIOS.INNER;
         this.middleRadius = this.radius * AppConfig.VISUALIZATION.RADIUS_RATIOS.MIDDLE;
         this.outerRadius = this.radius * AppConfig.VISUALIZATION.RADIUS_RATIOS.OUTER;
+        this.yearRadius = this.radius * AppConfig.VISUALIZATION.RADIUS_RATIOS.YEAR;
         
         this.svg
             .attr('width', this.width)
@@ -515,6 +527,7 @@ class TimeCircle {
         this.createStaticElements();
         this.renderSunArcs();
         this.renderMoonArcs();
+        this.createYearCircle();
         this.updateCurrentTime();
     }
     
@@ -693,5 +706,344 @@ class TimeCircle {
         
         // Also remove any tooltips
         this.g.selectAll('.uv-tooltip').remove();
+    }
+    
+    // ========== YEAR CIRCLE METHODS ==========
+    
+    /**
+     * Convert a date to angle (0 = Jan 1, increases clockwise)
+     */
+    dateToAngle(date) {
+        const year = date.getFullYear();
+        const startOfYear = new Date(year, 0, 1); // Jan 1st
+        const dayOfYear = Math.floor((date - startOfYear) / (1000 * 60 * 60 * 24)) + 1; // 1-365
+        const totalDays = this.isLeapYear(year) ? 366 : 365;
+        return (dayOfYear / totalDays) * 2 * Math.PI;
+    }
+    
+    /**
+     * Convert angle back to date
+     */
+    angleToDate(angle) {
+        const year = this.selectedDate.getFullYear();
+        const totalDays = this.isLeapYear(year) ? 366 : 365;
+        const dayOfYear = Math.floor((angle / (2 * Math.PI)) * totalDays) + 1;
+        const startOfYear = new Date(year, 0, 1);
+        const date = new Date(startOfYear);
+        date.setDate(dayOfYear);
+        return date;
+    }
+    
+    /**
+     * Check if year is leap year
+     */
+    isLeapYear(year) {
+        return ((year % 4 === 0) && (year % 100 !== 0)) || (year % 400 === 0);
+    }
+    
+    /**
+     * Create the year dial with rotatable design
+     */
+    createYearCircle() {
+        this.yearLayer.selectAll('*').remove();
+        
+        // Add year gradient to defs if not already there
+        const defs = this.svg.select('defs');
+        if (defs.select('#yearGradient').empty()) {
+            const yearGradient = defs.append('radialGradient')
+                .attr('id', 'yearGradient')
+                .attr('cx', '50%')
+                .attr('cy', '50%')
+                .attr('r', '50%');
+            
+            yearGradient.append('stop')
+                .attr('offset', '0%')
+                .attr('stop-color', AppConfig.COLORS.YEAR_GRADIENT.inner.color)
+                .attr('stop-opacity', AppConfig.COLORS.YEAR_GRADIENT.inner.opacity);
+            
+            yearGradient.append('stop')
+                .attr('offset', '100%')
+                .attr('stop-color', AppConfig.COLORS.YEAR_GRADIENT.outer.color)
+                .attr('stop-opacity', AppConfig.COLORS.YEAR_GRADIENT.outer.opacity);
+        }
+        
+        const yearInnerRadius = this.outerRadius + AppConfig.VISUALIZATION.LAYER_SPACING.YEAR_LAYER_OFFSET;
+        const yearOuterRadius = this.yearRadius;
+        
+        // Create rotatable year dial group
+        this.yearDial = this.yearLayer.append('g')
+            .attr('class', 'year-dial');
+        
+        // Background ring
+        const backgroundArc = d3.arc()
+            .innerRadius(yearInnerRadius)
+            .outerRadius(yearOuterRadius)
+            .startAngle(0)
+            .endAngle(2 * Math.PI);
+        
+        this.yearDial.append('path')
+            .attr('d', backgroundArc)
+            .attr('fill', 'url(#yearGradient)')
+            .attr('class', 'year-background');
+        
+        // Month markers and labels on the dial (both rotate with the dial)
+        this.createMonthMarkersOnDial(yearInnerRadius, yearOuterRadius);
+        
+        // Fixed indicator at the top (12 o'clock position)
+        this.createFixedDateIndicator(yearInnerRadius, yearOuterRadius);
+        
+        // Set initial rotation to show current date at top
+        this.setDateRotation(this.selectedDate);
+        
+        // Add interaction behaviors
+        this.addYearDialInteractions(yearInnerRadius, yearOuterRadius);
+    }
+    
+    /**
+     * Create month divider lines and labels on the rotatable dial
+     */
+    createMonthMarkersOnDial(innerRadius, outerRadius) {
+        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 
+                           'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        
+        // Create 12 evenly spaced month divider lines and labels
+        for (let i = 0; i < 12; i++) {
+            const angle = (i / 12) * 2 * Math.PI - Math.PI / 2; // Convert to standard trig
+            const x1 = Math.cos(angle) * innerRadius;
+            const y1 = Math.sin(angle) * innerRadius;
+            const x2 = Math.cos(angle) * outerRadius;
+            const y2 = Math.sin(angle) * outerRadius;
+            
+            // Month divider line
+            this.yearDial.append('line')
+                .attr('x1', x1)
+                .attr('y1', y1)
+                .attr('x2', x2)
+                .attr('y2', y2)
+                .attr('stroke', AppConfig.COLORS.YEAR_MARKERS)
+                .attr('stroke-width', 1)
+                .attr('class', 'month-marker');
+            
+            // Month label positioned between this line and the next
+            const labelAngle = angle + (Math.PI / 12); // Center between month lines
+            const labelRadius = (innerRadius + outerRadius) / 2;
+            const labelX = Math.cos(labelAngle) * labelRadius;
+            const labelY = Math.sin(labelAngle) * labelRadius;
+            
+            // Create a group for the label that can be counter-rotated
+            const labelGroup = this.yearDial.append('g')
+                .attr('class', 'month-label-group')
+                .attr('transform', `translate(${labelX}, ${labelY})`);
+            
+            // Add the text to the group
+            labelGroup.append('text')
+                .attr('x', 0)
+                .attr('y', 0)
+                .attr('text-anchor', 'middle')
+                .attr('dominant-baseline', 'central')
+                .attr('fill', AppConfig.COLORS.YEAR_LABELS)
+                .attr('font-size', AppConfig.TEXT.FONTS.YEAR_LABELS)
+                .attr('class', 'month-label')
+                .text(monthNames[i]);
+        }
+    }
+    
+    
+    /**
+     * Create a fixed indicator at the top (12 o'clock position)
+     */
+    createFixedDateIndicator(innerRadius, outerRadius) {
+        // Fixed indicator at top (12 o'clock = -Math.PI/2 radians)
+        const indicatorRadius = (innerRadius + outerRadius) / 2;
+        const x = 0; // At the top
+        const y = -indicatorRadius;
+        
+        // Create fixed indicator group (not on the rotating dial)
+        const indicator = this.yearLayer.append('g')
+            .attr('class', 'fixed-date-indicator')
+            .attr('transform', `translate(${x}, ${y})`);
+        
+        // Indicator triangle pointing down to the dial
+        indicator.append('polygon')
+            .attr('points', '0,-12 -8,4 8,4')
+            .attr('fill', AppConfig.COLORS.SELECTED_DATE)
+            .attr('stroke', 'white')
+            .attr('stroke-width', 2);
+        
+        // Selected date text above the indicator
+        const dateText = this.selectedDate.toLocaleDateString('en-US', { 
+            month: 'short', 
+            day: 'numeric' 
+        });
+        
+        indicator.append('text')
+            .attr('y', -20)
+            .attr('text-anchor', 'middle')
+            .attr('fill', 'white')
+            .attr('font-size', AppConfig.TEXT.FONTS.SELECTED_DATE)
+            .attr('font-weight', 'bold')
+            .attr('class', 'selected-date-text')
+            .text(dateText);
+    }
+    
+    /**
+     * Add drag and scroll interactions to the year dial
+     */
+    addYearDialInteractions(innerRadius, outerRadius) {
+        const self = this;
+        let startAngle = 0;
+        let currentRotation = this.yearRotation;
+        
+        // Drag to rotate the dial
+        const drag = d3.drag()
+            .on('start', function(event) {
+                const rect = self.svg.node().getBoundingClientRect();
+                const centerX = self.width / 2;
+                const centerY = self.height / 2;
+                const x = (event.sourceEvent.clientX - rect.left) - centerX;
+                const y = (event.sourceEvent.clientY - rect.top) - centerY;
+                startAngle = Math.atan2(y, x);
+                self.yearDial.style('cursor', 'grabbing');
+            })
+            .on('drag', function(event) {
+                const rect = self.svg.node().getBoundingClientRect();
+                const centerX = self.width / 2;
+                const centerY = self.height / 2;
+                const x = (event.sourceEvent.clientX - rect.left) - centerX;
+                const y = (event.sourceEvent.clientY - rect.top) - centerY;
+                
+                const currentAngle = Math.atan2(y, x);
+                const deltaAngle = currentAngle - startAngle;
+                
+                // Update rotation
+                self.yearRotation = currentRotation + deltaAngle;
+                self.applyDialRotation();
+                self.updateDateFromRotation();
+            })
+            .on('end', function(event) {
+                currentRotation = self.yearRotation;
+                self.yearDial.style('cursor', 'grab');
+            });
+        
+        // Apply drag to the year dial
+        this.yearDial
+            .style('cursor', 'grab')
+            .call(drag);
+        
+        // Mouse wheel scrolling
+        this.svg
+            .on('wheel', function(event) {
+                event.preventDefault();
+                const scrollSensitivity = 0.0005; // Reduced sensitivity for finer control
+                self.yearRotation -= event.deltaY * scrollSensitivity;
+                self.applyDialRotation();
+                self.updateDateFromRotation();
+            });
+    }
+    
+    /**
+     * Set the dial rotation to show a specific date at the top
+     */
+    setDateRotation(date) {
+        // Calculate the angle for this date (0 = Jan 1)
+        const dateAngle = this.dateToAngle(date);
+        // Rotate so this date appears at the top (subtract because we want to rotate the dial backward)
+        this.yearRotation = -dateAngle;
+        this.applyDialRotation();
+    }
+    
+    /**
+     * Apply the current rotation to the dial
+     */
+    applyDialRotation() {
+        if (this.yearDial) {
+            const rotationDegrees = this.yearRotation * 180 / Math.PI;
+            
+            // Rotate the entire dial
+            this.yearDial
+                .transition()
+                .duration(50) // Very quick transition for smooth dragging
+                .attr('transform', `rotate(${rotationDegrees})`);
+            
+            // Counter-rotate the month labels to keep them horizontal
+            this.yearDial.selectAll('.month-label-group')
+                .transition()
+                .duration(50)
+                .attr('transform', function() {
+                    const currentTransform = d3.select(this).attr('transform');
+                    const translateMatch = currentTransform.match(/translate\(([^)]+)\)/);
+                    const translatePart = translateMatch ? translateMatch[0] : 'translate(0,0)';
+                    return `${translatePart} rotate(${-rotationDegrees})`;
+                });
+        }
+    }
+    
+    /**
+     * Update the selected date based on current dial rotation
+     */
+    updateDateFromRotation() {
+        // Constrain rotation to 0-2π range (one full year)
+        this.yearRotation = this.normalizeRotation(this.yearRotation);
+        
+        // The date at the top is determined by the rotation
+        const dateAngle = -this.yearRotation;
+        const normalizedDateAngle = this.normalizeRotation(dateAngle);
+        const newDate = this.angleToDate(normalizedDateAngle);
+        
+        // Update selected date without triggering another rotation
+        this.selectedDate = new Date(newDate);
+        this.updateFixedIndicatorText();
+        
+        // Call callback if set
+        if (this.onDateChange) {
+            this.onDateChange(this.selectedDate);
+        }
+    }
+    
+    /**
+     * Normalize rotation to 0-2π range
+     */
+    normalizeRotation(angle) {
+        const twoPi = 2 * Math.PI;
+        angle = angle % twoPi;
+        if (angle < 0) angle += twoPi;
+        return angle;
+    }
+    
+    /**
+     * Update the text on the fixed indicator
+     */
+    updateFixedIndicatorText() {
+        const dateText = this.selectedDate.toLocaleDateString('en-US', { 
+            month: 'short', 
+            day: 'numeric' 
+        });
+        
+        this.yearLayer.select('.selected-date-text')
+            .text(dateText);
+    }
+    
+    /**
+     * Set selected date and update display
+     */
+    setSelectedDate(date) {
+        this.selectedDate = new Date(date);
+        
+        // Rotate the dial to show this date at the top
+        this.setDateRotation(date);
+        this.updateFixedIndicatorText();
+        
+        // Call callback if set
+        if (this.onDateChange) {
+            this.onDateChange(this.selectedDate);
+        }
+    }
+    
+    
+    /**
+     * Set callback for date changes
+     */
+    setOnDateChange(callback) {
+        this.onDateChange = callback;
     }
 }

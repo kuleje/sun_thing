@@ -23,10 +23,10 @@ class AstronomicalCalculations {
         };
     }
     
-    getNextEquinoxOrSolstice() {
-        const now = new Date();
-        const currentYear = now.getFullYear();
-        const events = this.equinoxSolsticeData;
+    getNextEquinoxOrSolstice(fromDate = new Date()) {
+        const referenceDate = new Date(fromDate);
+        const currentYear = referenceDate.getFullYear();
+        const events = this.getEquinoxSolsticeData(currentYear);
         
         if (!events) {
             return null;
@@ -41,8 +41,8 @@ class AstronomicalCalculations {
         
         // Find the next event
         for (const event of eventList) {
-            if (event.date > now) {
-                const daysUntil = Math.ceil((event.date - now) / AppConfig.ASTRONOMY.DAY_TO_MS);
+            if (event.date > referenceDate) {
+                const daysUntil = Math.ceil((event.date - referenceDate) / AppConfig.ASTRONOMY.DAY_TO_MS);
                 return {
                     ...event,
                     daysUntil: daysUntil
@@ -53,7 +53,7 @@ class AstronomicalCalculations {
         // If no events left this year, return the first event of next year
         // For now, just return the spring equinox with approximate date
         const nextSpringEquinox = new Date(currentYear + 1, 2, 20); // Approximate
-        const daysUntil = Math.ceil((nextSpringEquinox - now) / AppConfig.ASTRONOMY.DAY_TO_MS);
+        const daysUntil = Math.ceil((nextSpringEquinox - referenceDate) / AppConfig.ASTRONOMY.DAY_TO_MS);
         
         return {
             name: 'Spring Equinox',

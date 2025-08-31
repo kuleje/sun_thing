@@ -26,14 +26,16 @@ class AppConfig {
         
         // Radius ratios for different layers
         RADIUS_RATIOS: {
-            INNER: 0.6,                               // Inner circle (day/night arcs inner edge)
-            MIDDLE: 0.75,                             // Middle circle (day/night arcs outer edge) 
-            OUTER: 0.95                               // Outer circle (moon arcs and hour markers)
+            INNER: 0.50,                              // Inner circle (day/night arcs inner edge)
+            MIDDLE: 0.62,                             // Middle circle (day/night arcs outer edge) 
+            OUTER: 0.75,                              // Outer circle (moon arcs and hour markers)
+            YEAR: 0.92                                // Year circle (outermost ring for date selection)
         },
         
         // Layer spacing and padding
         LAYER_SPACING: {
             MOON_LAYER_OFFSET: 10,                    // Gap between sun and moon layers
+            YEAR_LAYER_OFFSET: 25,                    // Gap between moon and year layers (increased)
             HOVER_AREA_PADDING: 10,                   // Extra padding for hover areas
             UV_SEGMENT_PADDING: 0.005                 // Tiny gap between UV segments (hour units)
         },
@@ -155,6 +157,15 @@ class AppConfig {
         SUN_LABELS: 'rgba(255, 255, 255, 0.9)',
         MOON_LABELS: 'rgba(245, 245, 220, 0.9)',
         
+        // Year circle colors
+        YEAR_GRADIENT: {
+            inner: { color: '#4a90e2', opacity: 0.3 },    // Light blue for year ring
+            outer: { color: '#2c5aa0', opacity: 0.5 }
+        },
+        YEAR_MARKERS: 'rgba(255, 255, 255, 0.4)',
+        YEAR_LABELS: 'rgba(255, 255, 255, 0.7)',
+        SELECTED_DATE: '#ffd700',                         // Gold for selected date indicator
+        
         // Status colors
         STATUS_SUCCESS: '#51cf66',
         STATUS_ERROR: '#ff6b6b',
@@ -170,7 +181,9 @@ class AppConfig {
             UV_LABELS: '14px',
             CENTER_TIME: '24px',
             CENTER_INFO: '14px',
-            CENTER_CALC: '12px'
+            CENTER_CALC: '12px',
+            YEAR_LABELS: '11px',
+            SELECTED_DATE: '12px'
         },
         
         WEIGHTS: {

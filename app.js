@@ -67,6 +67,11 @@ class SunMoonApp {
             width: size,
             height: size
         });
+        
+        // Set up date change handler for year circle
+        this.timeCircle.setOnDateChange((date) => {
+            this.handleDateChange(date);
+        });
     }
     
     async loadAstronomicalData() {
@@ -366,6 +371,168 @@ class SunMoonApp {
         
         // Update center display after resize since it gets cleared during resize
         this.updateCenterDisplay();
+    }
+    
+    /**
+     * Handle date changes from the year circle
+     */
+    async handleDateChange(selectedDate) {
+        console.log('Date changed to:', selectedDate);
+        this.updateStatus('Loading data for selected date...');
+        
+        try {
+            // Get astronomical data for the selected date
+            const data = await this.api.getExtendedAstronomicalDataForDate(selectedDate);
+            console.log('Astronomical data loaded for selected date:', data);
+            this.currentData = data;
+            
+            // Update the circles with new data
+            this.timeCircle.updateSunData(data.sun);
+            this.timeCircle.updateMoonData(data.moon);
+            this.timeCircle.updateUVData(data.uv);
+            
+            // Calculate additional information for selected date
+            await this.calculateExtendedInfoForDate(selectedDate);
+            
+            // Update center display
+            this.updateCenterDisplayForDate(selectedDate);
+            
+            this.updateStatus('Data loaded for selected date');
+            
+        } catch (error) {
+            console.error('Failed to load astronomical data for selected date:', error);
+            this.updateStatus('Failed to load data for selected date');
+        }
+    }
+    
+    /**
+     * Calculate extended info for a specific date
+     */
+    async calculateExtendedInfoForDate(date) {
+        if (!this.currentData) return;
+        
+        // Calculate day length for selected date
+        const dayLength = this.calculations.calculateDayLength(this.currentData.sun);
+        
+        // For selected dates, show the date itself instead of finding matching day length
+        // since the user is exploring different dates
+        this.matchingDayLength = null;
+        
+        // Get next equinox/solstice from the selected date
+        this.nextEvent = this.calculations.getNextEquinoxOrSolstice(date);
+        console.log('Next equinox/solstice from selected date:', this.nextEvent);
+    }
+    
+    /**
+     * Update center display for selected date
+     */
+    updateCenterDisplayForDate(selectedDate) {
+        if (!this.timeCircle || !this.currentData) return;
+        
+        // Clear previous center info
+        this.timeCircle.centerInfo.selectAll('*').remove();
+        
+        // Selected date (large)
+        const dateText = selectedDate.toLocaleDateString('en-US', { 
+            month: 'short',
+            day: 'numeric',
+            year: 'numeric'
+        });
+        
+        this.timeCircle.centerInfo.append('text')
+            .attr('class', 'selected-date')
+            .attr('y', -60)
+            .attr('font-size', '18px')
+            .attr('fill', AppConfig.COLORS.SELECTED_DATE)
+            .text(dateText);
+        
+        // Current time (smaller when showing selected date)
+        const now = new Date();
+        const timeText = now.toLocaleTimeString('en-US', { 
+            hour12: false, 
+            hour: '2-digit', 
+            minute: '2-digit' 
+        });
+        
+        this.timeCircle.centerInfo.append('text')
+            .attr('class', 'current-time clickable-now')
+            .attr('y', -35)
+            .attr('font-size', '16px')
+            .style('cursor', 'pointer')
+            .style('text-decoration', 'underline')
+            .text(`Now: ${timeText}`)
+            .on('click', () => {
+                // Reset to current date
+                this.timeCircle.setSelectedDate(new Date());
+            });
+        
+        // Sun information for selected date
+        if (this.currentData.sun) {
+            const dayLength = this.calculations.calculateDayLength(this.currentData.sun);
+            
+            this.timeCircle.centerInfo.append('text')
+                .attr('class', 'day-info')
+                .attr('y', -10)
+                .text(`☀️ ${dayLength ? dayLength.formatted : '---'}`);
+        }
+        
+        // Show day of year
+        const startOfYear = new Date(selectedDate.getFullYear(), 0, 1);
+        const dayOfYear = Math.floor((selectedDate - startOfYear) / (1000 * 60 * 60 * 24)) + 1;
+        
+        this.timeCircle.centerInfo.append('text')
+            .attr('class', 'calculation-info')
+            .attr('y', 15)
+            .text(`Day ${dayOfYear} of ${selectedDate.getFullYear()}`);
+        
+        // UV information only for current date (not accurate for other dates)
+        const isCurrentDate = this.isCurrentDate(selectedDate);
+        if (this.currentData.uv && isCurrentDate) {
+            const currentUV = this.currentData.uv.current;
+            const uvCategory = this.api.getUVCategory(currentUV);
+            
+            this.timeCircle.centerInfo.append('text')
+                .attr('class', 'uv-info')
+                .attr('y', 40)
+                .attr('fill', uvCategory.color)
+                .text(`🌞 UV: ${currentUV.toFixed(1)} (${uvCategory.name})`);
+        }
+        
+        // Moon information for selected date
+        if (this.currentData.moon) {
+            const moonEmoji = this.calculations.getMoonPhaseEmoji(this.currentData.moon.moonPhase);
+            const moonText = `${moonEmoji} ${Math.round(this.currentData.moon.illumination)}% lit`;
+            
+            // Add indicator for approximate data when not current date
+            const finalText = isCurrentDate ? moonText : `${moonText} ~`;
+            
+            this.timeCircle.centerInfo.append('text')
+                .attr('class', 'calculation-info')
+                .attr('y', 60)
+                .style('opacity', isCurrentDate ? 1 : 0.8)
+                .text(finalText);
+        }
+        
+        // Next equinox/solstice from selected date
+        if (this.nextEvent) {
+            this.timeCircle.centerInfo.append('text')
+                .attr('class', 'calculation-info')
+                .attr('y', 80)
+                .text(`Next: ${this.nextEvent.name}`);
+            
+            this.timeCircle.centerInfo.append('text')
+                .attr('class', 'calculation-info')
+                .attr('y', 95)
+                .text(`${this.calculations.formatTimeUntilEvent(this.nextEvent.daysUntil)}`);
+        }
+    }
+    
+    /**
+     * Check if a date is the current date (today)
+     */
+    isCurrentDate(date) {
+        const today = new Date();
+        return date.toDateString() === today.toDateString();
     }
 }
 
