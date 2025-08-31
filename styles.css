@@ -1,0 +1,246 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: linear-gradient(135deg, #1e3c72, #2a5298);
+    color: white;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.container {
+    width: 100%;
+    max-width: 900px;
+    padding: 20px;
+    position: relative;
+}
+
+.header {
+    text-align: center;
+    margin-bottom: 30px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.header h1 {
+    font-size: 2.5rem;
+    font-weight: 300;
+    letter-spacing: 2px;
+}
+
+.settings-btn {
+    background: rgba(255, 255, 255, 0.1);
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    color: white;
+    padding: 10px 15px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 1rem;
+    transition: all 0.3s ease;
+}
+
+.settings-btn:hover {
+    background: rgba(255, 255, 255, 0.2);
+    border-color: rgba(255, 255, 255, 0.5);
+}
+
+.time-circle-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 600px;
+    position: relative;
+}
+
+.settings-panel {
+    position: absolute;
+    top: 80px;
+    right: 20px;
+    background: rgba(0, 0, 0, 0.9);
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-radius: 12px;
+    padding: 20px;
+    width: 320px;
+    backdrop-filter: blur(10px);
+    transition: all 0.3s ease;
+}
+
+.settings-panel.hidden {
+    display: none;
+}
+
+.setting-group {
+    margin-bottom: 15px;
+}
+
+.setting-group label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: 500;
+}
+
+.setting-group input {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+    font-size: 0.9rem;
+}
+
+.setting-group input::placeholder {
+    color: rgba(255, 255, 255, 0.6);
+}
+
+.setting-group small {
+    font-size: 0.8rem;
+    opacity: 0.7;
+    display: block;
+    margin-top: 3px;
+}
+
+.setting-group small a {
+    color: #64b5f6;
+}
+
+.save-btn, .close-btn {
+    padding: 8px 16px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    margin-right: 8px;
+    font-size: 0.9rem;
+    transition: all 0.3s ease;
+}
+
+.save-btn {
+    background: #4caf50;
+    color: white;
+}
+
+.save-btn:hover {
+    background: #45a049;
+}
+
+.close-btn {
+    background: rgba(255, 255, 255, 0.2);
+    color: white;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.close-btn:hover {
+    background: rgba(255, 255, 255, 0.3);
+}
+
+.info-panel {
+    text-align: center;
+    margin-top: 20px;
+    font-size: 0.9rem;
+    opacity: 0.8;
+}
+
+/* D3 Circle Styles */
+.time-circle {
+    filter: drop-shadow(0 0 20px rgba(255, 255, 255, 0.2));
+}
+
+.sun-arc {
+    stroke: none;
+}
+
+.moon-arc {
+    stroke: rgba(255, 255, 255, 0.2);
+    stroke-width: 1;
+}
+
+.time-hand {
+    stroke: #ffd700;
+    stroke-width: 3;
+    stroke-linecap: round;
+    filter: drop-shadow(0 0 5px rgba(255, 215, 0, 0.8));
+}
+
+.center-info {
+    text-anchor: middle;
+    dominant-baseline: central;
+}
+
+.current-time {
+    font-size: 2rem;
+    font-weight: bold;
+    fill: white;
+}
+
+.day-info {
+    font-size: 0.9rem;
+    fill: rgba(255, 255, 255, 0.8);
+}
+
+.calculation-info {
+    font-size: 0.8rem;
+    fill: rgba(255, 255, 255, 0.7);
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .header {
+        flex-direction: column;
+        gap: 15px;
+    }
+    
+    .header h1 {
+        font-size: 2rem;
+    }
+    
+    .settings-panel {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 90%;
+        max-width: 320px;
+        z-index: 1000;
+    }
+    
+    .time-circle-container {
+        min-height: 500px;
+    }
+    
+    .current-time {
+        font-size: 1.5rem;
+    }
+    
+    .day-info {
+        font-size: 0.8rem;
+    }
+    
+    .calculation-info {
+        font-size: 0.7rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .container {
+        padding: 10px;
+    }
+    
+    .header h1 {
+        font-size: 1.5rem;
+    }
+    
+    .time-circle-container {
+        min-height: 400px;
+    }
+    
+    .current-time {
+        font-size: 1.2rem;
+    }
+}

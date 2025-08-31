@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sun & Moon Time Circle</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Sun & Moon Time Circle</h1>
+            <button id="settingsBtn" class="settings-btn">⚙️ Settings</button>
+        </div>
+        
+        <div id="timeCircle" class="time-circle-container"></div>
+        
+        <div id="settingsPanel" class="settings-panel hidden">
+            <h3>API Settings</h3>
+            <div class="setting-group">
+                <label for="locationInput">Location (optional):</label>
+                <input type="text" id="locationInput" placeholder="City, Country or lat,lng">
+            </div>
+            <div class="setting-group">
+                <label for="ipGeoApiKey">IP Geolocation API Key:</label>
+                <input type="text" id="ipGeoApiKey" placeholder="Your API key">
+                <small><a href="https://ipgeolocation.io/" target="_blank">Get free API key</a></small>
+            </div>
+            <div class="setting-group">
+                <button id="saveSettings" class="save-btn">Save Settings</button>
+                <button id="closeSettings" class="close-btn">Close</button>
+            </div>
+        </div>
+        
+        <div class="info-panel">
+            <p id="status">Loading astronomical data...</p>
+        </div>
+    </div>
+
+    <script src="astronomical-api.js"></script>
+    <script src="calculations.js"></script>
+    <script src="d3-time-circle.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
