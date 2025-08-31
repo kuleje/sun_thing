@@ -43,7 +43,7 @@ class SunMoonApp {
         // Update data periodically (every hour, since astronomical data changes slowly)
         setInterval(() => {
             this.loadAstronomicalData();
-        }, 60 * 60 * 1000); // 1 hour
+        }, AppConfig.TIMEOUTS.UPDATE_INTERVAL);
         
         // Also check for date changes more frequently
         setInterval(() => {
@@ -53,7 +53,7 @@ class SunMoonApp {
                 this.loadAstronomicalData();
             }
             this.lastUpdateDate = currentDate;
-        }, 10 * 60 * 1000); // Check every 10 minutes
+        }, AppConfig.TIMEOUTS.DATE_CHECK_INTERVAL);
     }
     
     initializeTimeCircle() {
@@ -61,7 +61,7 @@ class SunMoonApp {
         const containerRect = container.getBoundingClientRect();
         
         // Make it responsive - allow larger sizes
-        const size = Math.min(containerRect.width || 1000, window.innerHeight * 0.9, 1200);
+        const size = AppConfig.getVisualizationSize(containerRect);
         
         this.timeCircle = new TimeCircle('#timeCircle', {
             width: size,
@@ -292,7 +292,7 @@ class SunMoonApp {
                     this.updateStatus('Location saved');
                 } else {
                     // Try to geocode the location name
-                    this.updateStatus('Location format should be: lat, lng (e.g., 40.7128, -74.0060)');
+                    this.updateStatus(`Location format should be: lat, lng (e.g., ${AppConfig.ASTRONOMY.DEFAULT_LOCATION.lat}, ${AppConfig.ASTRONOMY.DEFAULT_LOCATION.lng})`);
                 }
             } catch (error) {
                 this.updateStatus('Invalid location format');
@@ -309,7 +309,7 @@ class SunMoonApp {
                 if (result.success) {
                     this.updateStatus('API connection successful');
                     // Reload data with new settings
-                    setTimeout(() => this.loadAstronomicalData(), 1000);
+                    setTimeout(() => this.loadAstronomicalData(), AppConfig.TIMEOUTS.SETTINGS_RELOAD_DELAY);
                 } else {
                     this.updateStatus(`API error: ${result.message}`);
                 }
@@ -328,17 +328,17 @@ class SunMoonApp {
             if (statusElement.textContent === message) {
                 statusElement.textContent = '';
             }
-        }, 5000);
+        }, AppConfig.TIMEOUTS.STATUS_CLEAR);
     }
     
     updateLocationDisplay(location) {
         const locationElement = document.getElementById('location-display');
         if (!location) {
             locationElement.textContent = '📍 No location set - click Settings to configure';
-            locationElement.style.color = '#ff6b6b';
+            locationElement.style.color = AppConfig.COLORS.STATUS_ERROR;
         } else {
             locationElement.textContent = `📍 Location: ${location.lat.toFixed(3)}°, ${location.lng.toFixed(3)}°`;
-            locationElement.style.color = '#51cf66';
+            locationElement.style.color = AppConfig.COLORS.STATUS_SUCCESS;
         }
     }
     
@@ -347,7 +347,7 @@ class SunMoonApp {
         
         const container = document.getElementById('timeCircle');
         const containerRect = container.getBoundingClientRect();
-        const size = Math.min(containerRect.width || 1000, window.innerHeight * 0.9, 1200);
+        const size = AppConfig.getVisualizationSize(containerRect);
         
         this.timeCircle.resize(size, size);
         

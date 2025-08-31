@@ -1,12 +1,12 @@
 class TimeCircle {
     constructor(container, options = {}) {
         this.container = d3.select(container);
-        this.width = options.width || 1000;
-        this.height = options.height || 1000;
-        this.radius = Math.min(this.width, this.height) / 2 - 60;
-        this.innerRadius = this.radius * 0.6;
-        this.middleRadius = this.radius * 0.75;
-        this.outerRadius = this.radius * 0.95;
+        this.width = options.width || AppConfig.VISUALIZATION.DEFAULT_WIDTH;
+        this.height = options.height || AppConfig.VISUALIZATION.DEFAULT_HEIGHT;
+        this.radius = AppConfig.getRadiusWithMargin(this.width, this.height);
+        this.innerRadius = this.radius * AppConfig.VISUALIZATION.RADIUS_RATIOS.INNER;
+        this.middleRadius = this.radius * AppConfig.VISUALIZATION.RADIUS_RATIOS.MIDDLE;
+        this.outerRadius = this.radius * AppConfig.VISUALIZATION.RADIUS_RATIOS.OUTER;
         
         this.svg = null;
         this.g = null;
@@ -81,13 +81,13 @@ class TimeCircle {
         
         dayGradient.append('stop')
             .attr('offset', '0%')
-            .attr('stop-color', '#ffd700')
-            .attr('stop-opacity', 0.8);
+            .attr('stop-color', AppConfig.COLORS.DAY_GRADIENT.inner.color)
+            .attr('stop-opacity', AppConfig.COLORS.DAY_GRADIENT.inner.opacity);
         
         dayGradient.append('stop')
             .attr('offset', '100%')
-            .attr('stop-color', '#ff8c00')
-            .attr('stop-opacity', 0.6);
+            .attr('stop-color', AppConfig.COLORS.DAY_GRADIENT.outer.color)
+            .attr('stop-opacity', AppConfig.COLORS.DAY_GRADIENT.outer.opacity);
         
         // Night gradient
         const nightGradient = defs.append('radialGradient')
@@ -98,13 +98,13 @@ class TimeCircle {
         
         nightGradient.append('stop')
             .attr('offset', '0%')
-            .attr('stop-color', '#1a1a2e')
-            .attr('stop-opacity', 0.9);
+            .attr('stop-color', AppConfig.COLORS.NIGHT_GRADIENT.inner.color)
+            .attr('stop-opacity', AppConfig.COLORS.NIGHT_GRADIENT.inner.opacity);
         
         nightGradient.append('stop')
             .attr('offset', '100%')
-            .attr('stop-color', '#16213e')
-            .attr('stop-opacity', 0.7);
+            .attr('stop-color', AppConfig.COLORS.NIGHT_GRADIENT.outer.color)
+            .attr('stop-opacity', AppConfig.COLORS.NIGHT_GRADIENT.outer.opacity);
         
         // Moon gradient
         const moonGradient = defs.append('radialGradient')
@@ -115,22 +115,20 @@ class TimeCircle {
         
         moonGradient.append('stop')
             .attr('offset', '0%')
-            .attr('stop-color', '#f5f5dc')
-            .attr('stop-opacity', 0.8);
+            .attr('stop-color', AppConfig.COLORS.MOON_GRADIENT.inner.color)
+            .attr('stop-opacity', AppConfig.COLORS.MOON_GRADIENT.inner.opacity);
         
         moonGradient.append('stop')
             .attr('offset', '100%')
-            .attr('stop-color', '#c0c0c0')
-            .attr('stop-opacity', 0.6);
+            .attr('stop-color', AppConfig.COLORS.MOON_GRADIENT.outer.color)
+            .attr('stop-opacity', AppConfig.COLORS.MOON_GRADIENT.outer.opacity);
         
         // UV gradients for different intensity levels
-        const uvColors = [
-            { id: 'uvLowGradient', color1: '#289500', color2: '#1e7100' },      // Green
-            { id: 'uvModerateGradient', color1: '#F7E400', color2: '#d4c100' }, // Yellow
-            { id: 'uvHighGradient', color1: '#F85900', color2: '#d14500' },     // Orange
-            { id: 'uvVeryHighGradient', color1: '#D8001D', color2: '#a50016' }, // Red
-            { id: 'uvExtremeGradient', color1: '#6B49C8', color2: '#4c329e' }   // Violet
-        ];
+        const uvColors = Object.entries(AppConfig.UV_INDEX.GRADIENTS).map(([id, colors]) => ({
+            id,
+            color1: colors.color1,
+            color2: colors.color2
+        }));
         
         uvColors.forEach(uv => {
             const gradient = defs.append('radialGradient')
@@ -176,7 +174,7 @@ class TimeCircle {
                 const length = i % 6 === 0 ? 15 : i % 3 === 0 ? 10 : 5;
                 return Math.sin(angle) * (this.outerRadius - length);
             })
-            .attr('stroke', 'rgba(255, 255, 255, 0.6)')
+            .attr('stroke', AppConfig.COLORS.HOUR_MARKERS)
             .attr('stroke-width', (d, i) => i % 6 === 0 ? 2 : 1);
         
         // Hour labels
@@ -195,8 +193,8 @@ class TimeCircle {
             })
             .attr('text-anchor', 'middle')
             .attr('dominant-baseline', 'central')
-            .attr('fill', 'rgba(255, 255, 255, 0.8)')
-            .attr('font-size', '14px')
+            .attr('fill', AppConfig.COLORS.HOUR_LABELS)
+            .attr('font-size', AppConfig.TEXT.FONTS.HOUR_LABELS)
             .text(d => d === 0 ? '24' : d);
         
         // Create groups for layers
@@ -492,16 +490,16 @@ class TimeCircle {
         this.updateCurrentTime();
         this.updateIntervalId = setInterval(() => {
             this.updateCurrentTime();
-        }, 60000); // Update every minute
+        }, AppConfig.TIMEOUTS.CLOCK_UPDATE_INTERVAL);
     }
     
     resize(width, height) {
         this.width = width;
         this.height = height;
-        this.radius = Math.min(this.width, this.height) / 2 - 60;
-        this.innerRadius = this.radius * 0.6;
-        this.middleRadius = this.radius * 0.75;
-        this.outerRadius = this.radius * 0.95;
+        this.radius = AppConfig.getRadiusWithMargin(this.width, this.height);
+        this.innerRadius = this.radius * AppConfig.VISUALIZATION.RADIUS_RATIOS.INNER;
+        this.middleRadius = this.radius * AppConfig.VISUALIZATION.RADIUS_RATIOS.MIDDLE;
+        this.outerRadius = this.radius * AppConfig.VISUALIZATION.RADIUS_RATIOS.OUTER;
         
         this.svg
             .attr('width', this.width)
@@ -521,11 +519,8 @@ class TimeCircle {
     }
     
     getUVGradientId(uvValue) {
-        if (uvValue <= 2) return 'url(#uvLowGradient)';
-        if (uvValue <= 5) return 'url(#uvModerateGradient)';
-        if (uvValue <= 7) return 'url(#uvHighGradient)';
-        if (uvValue <= 10) return 'url(#uvVeryHighGradient)';
-        return 'url(#uvExtremeGradient)';
+        const category = AppConfig.getUVCategory(uvValue);
+        return `url(#${category.gradientId})`;
     }
     
     showUVArcs() {
@@ -676,11 +671,7 @@ class TimeCircle {
     }
     
     getUVCategory(uvi) {
-        if (uvi <= 2) return { name: "Low", color: "#289500" };
-        if (uvi <= 5) return { name: "Moderate", color: "#F7E400" };
-        if (uvi <= 7) return { name: "High", color: "#F85900" };
-        if (uvi <= 10) return { name: "Very High", color: "#D8001D" };
-        return { name: "Extreme", color: "#6B49C8" };
+        return AppConfig.getUVCategory(uvi);
     }
     
     hideUVArcs() {

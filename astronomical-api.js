@@ -4,7 +4,7 @@ class AstronomicalAPI {
         this.openWeatherApiKey = localStorage.getItem('openWeatherApiKey') || '';
         this.userLocation = this.loadUserLocation();
         this.cache = new Map();
-        this.cacheTimeout = 6 * 60 * 60 * 1000; // 6 hours in ms
+        this.cacheTimeout = AppConfig.TIMEOUTS.CACHE_DURATION;
         this.dailyCache = new Map(); // Cache astronomical data per day
     }
     
@@ -60,8 +60,8 @@ class AstronomicalAPI {
                         resolve(null);
                     },
                     {
-                        timeout: 10000,
-                        maximumAge: 5 * 60 * 1000 // Cache location for 5 minutes
+                        timeout: AppConfig.API.MAX_RETRIES * AppConfig.TIMEOUTS.API_REQUEST_TIMEOUT,
+                        maximumAge: AppConfig.TIMEOUTS.LOCATION_CACHE
                     }
                 );
             } else {
@@ -171,10 +171,10 @@ class AstronomicalAPI {
         // Simple sunrise/sunset calculation for fallback
         // This is a very basic approximation - real calculation would be more complex
         const dayOfYear = Math.floor((date - new Date(date.getFullYear(), 0, 0)) / 86400000);
-        const lat = this.userLocation?.lat || 40.7128; // Default to NYC
+        const lat = this.userLocation?.lat || AppConfig.ASTRONOMY.DEFAULT_LOCATION.lat;
         
         // Very simplified calculation (not accurate but provides fallback)
-        const declination = 23.45 * Math.sin((360/365) * (dayOfYear - 81) * Math.PI / 180);
+        const declination = AppConfig.ASTRONOMY.SOLAR_DECLINATION_ANGLE * Math.sin((360/AppConfig.ASTRONOMY.DAYS_PER_YEAR) * (dayOfYear - AppConfig.ASTRONOMY.SOLAR_DECLINATION_OFFSET) * Math.PI / 180);
         const hourAngle = Math.acos(-Math.tan(lat * Math.PI / 180) * Math.tan(declination * Math.PI / 180));
         
         const sunriseHour = 12 - (hourAngle * 180 / Math.PI) / 15;
@@ -198,9 +198,9 @@ class AstronomicalAPI {
     
     getFallbackMoonData(date) {
         // Very basic moon phase calculation for fallback
-        const knownNewMoon = new Date('2025-01-29'); // Known new moon date
-        const daysSinceNewMoon = (date - knownNewMoon) / (1000 * 60 * 60 * 24);
-        const lunarCycle = 29.53; // days
+        const knownNewMoon = AppConfig.ASTRONOMY.KNOWN_NEW_MOON;
+        const daysSinceNewMoon = (date - knownNewMoon) / AppConfig.ASTRONOMY.DAY_TO_MS;
+        const lunarCycle = AppConfig.ASTRONOMY.LUNAR_CYCLE_DAYS;
         const phase = (daysSinceNewMoon % lunarCycle) / lunarCycle;
         
         let illumination;
@@ -221,13 +221,14 @@ class AstronomicalAPI {
     }
     
     getMoonPhaseName(phase) {
-        if (phase < 0.125) return 'New Moon';
-        if (phase < 0.25) return 'Waxing Crescent';
-        if (phase < 0.375) return 'First Quarter';
-        if (phase < 0.5) return 'Waxing Gibbous';
-        if (phase < 0.625) return 'Full Moon';
-        if (phase < 0.75) return 'Waning Gibbous';
-        if (phase < 0.875) return 'Last Quarter';
+        const t = AppConfig.ASTRONOMY.MOON_PHASE_THRESHOLDS;
+        if (phase < t.NEW_MOON) return 'New Moon';
+        if (phase < t.WAXING_CRESCENT) return 'Waxing Crescent';
+        if (phase < t.FIRST_QUARTER) return 'First Quarter';
+        if (phase < t.WAXING_GIBBOUS) return 'Waxing Gibbous';
+        if (phase < t.FULL_MOON) return 'Full Moon';
+        if (phase < t.WANING_GIBBOUS) return 'Waning Gibbous';
+        if (phase < t.LAST_QUARTER) return 'Last Quarter';
         return 'Waning Crescent';
     }
     
@@ -526,11 +527,7 @@ class AstronomicalAPI {
     }
     
     getUVCategory(uvi) {
-        if (uvi <= 2) return { name: "Low", color: "#289500" };
-        if (uvi <= 5) return { name: "Moderate", color: "#F7E400" };
-        if (uvi <= 7) return { name: "High", color: "#F85900" };
-        if (uvi <= 10) return { name: "Very High", color: "#D8001D" };
-        return { name: "Extreme", color: "#6B49C8" };
+        return AppConfig.getUVCategory(uvi);
     }
     
     async getExtendedAstronomicalData() {

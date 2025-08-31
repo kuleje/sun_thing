@@ -7,20 +7,7 @@ class AstronomicalCalculations {
     // Fixed dates for equinoxes and solstices
     getEquinoxSolsticeData(year) {
         // Approximate dates - these vary slightly each year but are close enough
-        const data = {
-            2024: {
-                springEquinox: new Date('2024-03-20T03:06:00Z'),
-                summerSolstice: new Date('2024-06-20T20:51:00Z'),
-                autumnEquinox: new Date('2024-09-22T12:44:00Z'),
-                winterSolstice: new Date('2024-12-21T09:21:00Z')
-            },
-            2025: {
-                springEquinox: new Date('2025-03-20T09:01:00Z'),
-                summerSolstice: new Date('2025-06-21T02:42:00Z'),
-                autumnEquinox: new Date('2025-09-22T18:19:00Z'),
-                winterSolstice: new Date('2025-12-21T15:03:00Z')
-            }
-        };
+        const data = AppConfig.ASTRONOMICAL_EVENTS;
         
         // If we have data for the year, use it
         if (data[year]) {
@@ -55,7 +42,7 @@ class AstronomicalCalculations {
         // Find the next event
         for (const event of eventList) {
             if (event.date > now) {
-                const daysUntil = Math.ceil((event.date - now) / (1000 * 60 * 60 * 24));
+                const daysUntil = Math.ceil((event.date - now) / AppConfig.ASTRONOMY.DAY_TO_MS);
                 return {
                     ...event,
                     daysUntil: daysUntil
@@ -66,7 +53,7 @@ class AstronomicalCalculations {
         // If no events left this year, return the first event of next year
         // For now, just return the spring equinox with approximate date
         const nextSpringEquinox = new Date(currentYear + 1, 2, 20); // Approximate
-        const daysUntil = Math.ceil((nextSpringEquinox - now) / (1000 * 60 * 60 * 24));
+        const daysUntil = Math.ceil((nextSpringEquinox - now) / AppConfig.ASTRONOMY.DAY_TO_MS);
         
         return {
             name: 'Spring Equinox',
@@ -82,7 +69,7 @@ class AstronomicalCalculations {
         }
         
         const dayLengthMs = sunData.sunset - sunData.sunrise;
-        const totalMinutes = Math.floor(dayLengthMs / (1000 * 60));
+        const totalMinutes = Math.floor(dayLengthMs / AppConfig.ASTRONOMY.MINUTES_TO_MS);
         const hours = Math.floor(totalMinutes / 60);
         const minutes = totalMinutes % 60;
         
@@ -118,7 +105,7 @@ class AstronomicalCalculations {
             testDate.setDate(testDate.getDate() + offset);
             
             // Skip if the test date is too close to today (within 60 days)
-            const daysDifference = Math.abs((testDate - today) / (1000 * 60 * 60 * 24));
+            const daysDifference = Math.abs((testDate - today) / AppConfig.ASTRONOMY.DAY_TO_MS);
             if (daysDifference < 60) {
                 continue;
             }
@@ -143,14 +130,14 @@ class AstronomicalCalculations {
     estimateDayLength(date, location) {
         // Simplified day length calculation based on latitude and day of year
         if (!location || typeof location.lat !== 'number') {
-            location = { lat: 40.7128 }; // Default to NYC
+            location = AppConfig.ASTRONOMY.DEFAULT_LOCATION;
         }
         
         const dayOfYear = this.getDayOfYear(date);
         const lat = location.lat * Math.PI / 180; // Convert to radians
         
         // Solar declination angle
-        const declination = 23.45 * Math.sin((360 / 365) * (dayOfYear - 81) * Math.PI / 180);
+        const declination = AppConfig.ASTRONOMY.SOLAR_DECLINATION_ANGLE * Math.sin((360 / AppConfig.ASTRONOMY.DAYS_PER_YEAR) * (dayOfYear - AppConfig.ASTRONOMY.SOLAR_DECLINATION_OFFSET) * Math.PI / 180);
         const declinationRad = declination * Math.PI / 180;
         
         // Hour angle at sunrise/sunset
