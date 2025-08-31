@@ -63,6 +63,35 @@ class AstronomicalCalculations {
         };
     }
     
+    getNextSolstice(today) {
+        const currentYear = today.getFullYear();
+        const events = this.equinoxSolsticeData;
+        
+        if (!events) {
+            return null;
+        }
+        
+        const solsticeList = [
+            { name: 'Summer Solstice', date: events.summerSolstice, season: 'summer' },
+            { name: 'Winter Solstice', date: events.winterSolstice, season: 'winter' }
+        ];
+        
+        // Find the next solstice
+        for (const solstice of solsticeList) {
+            if (solstice.date > today) {
+                return solstice;
+            }
+        }
+        
+        // If no solstices left this year, return the summer solstice of next year
+        const nextSummerSolstice = new Date(currentYear + 1, 5, 21); // Approximate June 21
+        return {
+            name: 'Summer Solstice',
+            date: nextSummerSolstice,
+            season: 'summer'
+        };
+    }
+    
     calculateDayLength(sunData) {
         if (!sunData || !sunData.sunrise || !sunData.sunset) {
             return null;
@@ -83,47 +112,69 @@ class AstronomicalCalculations {
     
     async findMatchingDayLength(currentDayLength, userLocation) {
         if (!currentDayLength || !currentDayLength.totalMinutes) {
+            console.log('No current day length or totalMinutes:', currentDayLength);
             return null;
         }
         
         const targetMinutes = currentDayLength.totalMinutes;
-        const tolerance = 5; // 5 minutes tolerance
         const today = new Date();
         const currentDayOfYear = this.getDayOfYear(today);
         
-        // Search through the year for matching day lengths
-        // We'll check days 6 months away (opposite season)
-        const sixMonthsAway = new Date(today);
-        sixMonthsAway.setMonth(sixMonthsAway.getMonth() + 6);
+        console.log('Searching for closest matching day length:', {
+            targetMinutes,
+            currentDayLength,
+            userLocation
+        });
         
-        // Search around the opposite season (±30 days)
+        // Find the next solstice to determine when the seasonal direction changes
+        const nextSolstice = this.getNextSolstice(today);
+        console.log('Next solstice:', nextSolstice);
+        
+        // Search only after the next solstice (when seasonal direction changes)
         let closestMatch = null;
         let smallestDifference = Infinity;
+        let checkedDates = 0;
         
-        for (let offset = -30; offset <= 30; offset++) {
-            const testDate = new Date(sixMonthsAway);
-            testDate.setDate(testDate.getDate() + offset);
+        // Start searching from the day after the next solstice
+        const searchStartDate = new Date(nextSolstice.date);
+        searchStartDate.setDate(searchStartDate.getDate() + 1);
+        const daysUntilSearchStart = Math.ceil((searchStartDate - today) / AppConfig.ASTRONOMY.DAY_TO_MS);
+        
+        console.log(`Searching after next solstice (${nextSolstice.name}), starting ${daysUntilSearchStart} days from now...`);
+        
+        // Search for up to 185 days after the solstice (just over 6 months)
+        for (let daysAfterSolstice = 1; daysAfterSolstice <= 185; daysAfterSolstice++) {
+            const daysAhead = daysUntilSearchStart + daysAfterSolstice;
+            const testDate = new Date(today);
+            testDate.setDate(testDate.getDate() + daysAhead);
             
-            // Skip if the test date is too close to today (within 60 days)
-            const daysDifference = Math.abs((testDate - today) / AppConfig.ASTRONOMY.DAY_TO_MS);
-            if (daysDifference < 60) {
-                continue;
-            }
-            
+            checkedDates++;
             const testDayLength = this.estimateDayLength(testDate, userLocation);
             const difference = Math.abs(testDayLength.totalMinutes - targetMinutes);
             
-            if (difference <= tolerance && difference < smallestDifference) {
+            // Keep track of the closest match, regardless of how close it is
+            if (difference < smallestDifference) {
                 smallestDifference = difference;
                 closestMatch = {
                     date: new Date(testDate),
                     dayLength: testDayLength,
                     difference: difference,
-                    daysFromToday: Math.round(daysDifference)
+                    daysFromToday: daysAhead
                 };
+                
+                // Log good matches for debugging
+                if (difference <= 10) {
+                    console.log(`Good match found: ${testDate.toDateString()}, dayLength: ${testDayLength.totalMinutes}min, diff: ${difference}min`);
+                }
+            }
+            
+            // Log first few checks for debugging
+            if (checkedDates <= 5) {
+                console.log(`Check ${checkedDates} (${daysAhead} days): ${testDate.toDateString()}, dayLength: ${testDayLength.totalMinutes}min, diff: ${difference}min`);
             }
         }
         
+        console.log(`Checked ${checkedDates} dates. Best match: ${closestMatch ? closestMatch.date.toDateString() : 'none'} (${smallestDifference.toFixed(1)} min difference)`);
         return closestMatch;
     }
     

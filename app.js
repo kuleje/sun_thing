@@ -134,10 +134,14 @@ class SunMoonApp {
         
         // Find matching day length
         if (dayLength) {
+            console.log('Searching for matching day length for:', dayLength);
             this.matchingDayLength = await this.calculations.findMatchingDayLength(
                 dayLength,
                 this.currentData.location
             );
+            console.log('Found matching day length:', this.matchingDayLength);
+        } else {
+            console.log('No day length calculated, cannot find matching day length');
         }
         
         // Get next equinox/solstice
@@ -175,6 +179,31 @@ class SunMoonApp {
                 .text(`☀️ ${dayLength ? dayLength.formatted : '---'}`);
         }
         
+        // Matching day length - moved to be prominent, right after day length
+        console.log('Matching day length data:', this.matchingDayLength);
+        if (this.matchingDayLength) {
+            console.log('Displaying matching day length:', this.matchingDayLength.daysFromToday, 'days');
+            
+            this.timeCircle.centerInfo.append('text')
+                .attr('class', 'calculation-info')
+                .attr('y', 5)
+                .text(`Same day length:`);
+            
+            // Show both date and days countdown
+            const dateStr = this.matchingDayLength.date.toLocaleDateString('en-US', { 
+                month: 'short', 
+                day: 'numeric',
+                year: this.matchingDayLength.date.getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined
+            });
+            
+            this.timeCircle.centerInfo.append('text')
+                .attr('class', 'calculation-info')
+                .attr('y', 20)
+                .text(`${dateStr} (${this.matchingDayLength.daysFromToday} days)`);
+        } else {
+            console.log('No matching day length found');
+        }
+        
         // UV information
         if (this.currentData.uv) {
             const currentUV = this.currentData.uv.current;
@@ -182,7 +211,7 @@ class SunMoonApp {
             
             this.timeCircle.centerInfo.append('text')
                 .attr('class', 'uv-info')
-                .attr('y', 5)
+                .attr('y', 45)
                 .attr('fill', uvCategory.color)
                 .text(`🌞 UV: ${currentUV.toFixed(1)} (${uvCategory.name})`);
         }
@@ -193,7 +222,7 @@ class SunMoonApp {
             
             this.timeCircle.centerInfo.append('text')
                 .attr('class', 'calculation-info')
-                .attr('y', 25)
+                .attr('y', 65)
                 .text(`${moonEmoji} ${Math.round(this.currentData.moon.illumination)}% lit`);
         }
         
@@ -202,31 +231,15 @@ class SunMoonApp {
             console.log('Displaying next event in center:', this.nextEvent);
             this.timeCircle.centerInfo.append('text')
                 .attr('class', 'calculation-info')
-                .attr('y', 45)
+                .attr('y', 85)
                 .text(`${this.nextEvent.name}:`);
             
             this.timeCircle.centerInfo.append('text')
                 .attr('class', 'calculation-info')
-                .attr('y', 60)
+                .attr('y', 100)
                 .text(`${this.calculations.formatTimeUntilEvent(this.nextEvent.daysUntil)}`);
         } else {
             console.log('No next event found to display');
-        }
-        
-        // Matching day length
-        if (this.matchingDayLength) {
-            this.timeCircle.centerInfo.append('text')
-                .attr('class', 'calculation-info')
-                .attr('y', 80)
-                .text(`Same day length:`);
-            
-            this.timeCircle.centerInfo.append('text')
-                .attr('class', 'calculation-info')
-                .attr('y', 95)
-                .text(`${this.matchingDayLength.date.toLocaleDateString('en-US', { 
-                    month: 'short', 
-                    day: 'numeric' 
-                })}`);
         }
     }
     
