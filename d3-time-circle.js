@@ -31,6 +31,7 @@ class TimeCircle {
         
         this.sunData = null;
         this.moonData = null;
+        this.uvData = null;
         
         this.init();
     }
@@ -120,6 +121,33 @@ class TimeCircle {
             .attr('offset', '100%')
             .attr('stop-color', '#c0c0c0')
             .attr('stop-opacity', 0.6);
+        
+        // UV gradients for different intensity levels
+        const uvColors = [
+            { id: 'uvLowGradient', color1: '#289500', color2: '#1e7100' },      // Green
+            { id: 'uvModerateGradient', color1: '#F7E400', color2: '#d4c100' }, // Yellow
+            { id: 'uvHighGradient', color1: '#F85900', color2: '#d14500' },     // Orange
+            { id: 'uvVeryHighGradient', color1: '#D8001D', color2: '#a50016' }, // Red
+            { id: 'uvExtremeGradient', color1: '#6B49C8', color2: '#4c329e' }   // Violet
+        ];
+        
+        uvColors.forEach(uv => {
+            const gradient = defs.append('radialGradient')
+                .attr('id', uv.id)
+                .attr('cx', '50%')
+                .attr('cy', '50%')
+                .attr('r', '50%');
+            
+            gradient.append('stop')
+                .attr('offset', '0%')
+                .attr('stop-color', uv.color1)
+                .attr('stop-opacity', 1);
+            
+            gradient.append('stop')
+                .attr('offset', '100%')
+                .attr('stop-color', uv.color2)
+                .attr('stop-opacity', 1);
+        });
     }
     
     createStaticElements() {
@@ -173,6 +201,7 @@ class TimeCircle {
         // Create groups for layers
         this.sunLayer = this.g.append('g').attr('class', 'sun-layer');
         this.moonLayer = this.g.append('g').attr('class', 'moon-layer');
+        this.uvLayer = this.g.append('g').attr('class', 'uv-layer'); // UV layer after moon layer for proper z-ordering
         this.timeLayer = this.g.append('g').attr('class', 'time-layer');
         this.centerInfo = this.g.append('g').attr('class', 'center-info');
     }
@@ -185,6 +214,11 @@ class TimeCircle {
     updateMoonData(moonData) {
         this.moonData = moonData;
         this.renderMoonArcs();
+    }
+    
+    updateUVData(uvData) {
+        this.uvData = uvData;
+        // UV arcs are shown only on hover, so we don't render them initially
     }
     
     renderSunArcs() {
@@ -220,22 +254,35 @@ class TimeCircle {
         const dayAngles = this.spanToAngles(sunriseHour, sunsetHour);
         const dayArc = arcGenerator(dayAngles);
         
-        this.sunLayer.append('path')
+        const dayArcElement = this.sunLayer.append('path')
             .attr('d', dayArc)
             .attr('fill', 'url(#dayGradient)')
             .attr('class', 'sun-arc day-arc')
+            .style('cursor', 'pointer');
+        
+        // Create an invisible larger hover area to ensure consistent mouse events
+        const hoverArcGenerator = d3.arc()
+            .innerRadius(this.innerRadius - 10)
+            .outerRadius(this.middleRadius + 10);
+            
+        const hoverArea = this.sunLayer.append('path')
+            .attr('d', hoverArcGenerator(dayAngles))
+            .attr('fill', 'transparent')
+            .attr('class', 'sun-arc-hover-area')
             .style('cursor', 'pointer')
             .on('mouseover', () => {
                 this.sunLayer.selectAll('.sunrise-label, .sunset-label')
                     .transition()
                     .duration(200)
                     .attr('opacity', 1);
+                this.showUVArcs();
             })
             .on('mouseout', () => {
                 this.sunLayer.selectAll('.sunrise-label, .sunset-label')
                     .transition()
                     .duration(200)
                     .attr('opacity', 0);
+                this.hideUVArcs();
             });
         
         // Night arc from sunset to sunrise (next day)
@@ -462,5 +509,189 @@ class TimeCircle {
         this.renderSunArcs();
         this.renderMoonArcs();
         this.updateCurrentTime();
+    }
+    
+    getUVGradientId(uvValue) {
+        if (uvValue <= 2) return 'url(#uvLowGradient)';
+        if (uvValue <= 5) return 'url(#uvModerateGradient)';
+        if (uvValue <= 7) return 'url(#uvHighGradient)';
+        if (uvValue <= 10) return 'url(#uvVeryHighGradient)';
+        return 'url(#uvExtremeGradient)';
+    }
+    
+    showUVArcs() {
+        if (!this.uvData || !this.sunData) {
+            console.log('No UV or sun data available for UV arc rendering');
+            return;
+        }
+        
+        console.log('Showing UV arcs with data:', this.uvData);
+        
+        // Debug: Log location and timing information
+        console.log('Location & Timing Debug:');
+        console.log('  Current local time:', new Date().toLocaleString());
+        console.log('  Current local hour:', new Date().getHours());
+        console.log('  User location coordinates:', JSON.stringify(window.sunMoonApp?.api?.userLocation || 'Not available'));
+        console.log('  Sun data times - Sunrise:', this.sunData?.sunrise?.toLocaleString(), 'Sunset:', this.sunData?.sunset?.toLocaleString());
+        
+        // Hide the solar arc to be replaced by UV arcs
+        const dayArcElement = this.sunLayer.select('.day-arc');
+        console.log('Day arc element found for hiding:', !dayArcElement.empty());
+        
+        dayArcElement
+            .transition()
+            .duration(200)
+            .attr('opacity', 0);
+        
+        // Clear any existing UV arcs
+        this.uvLayer.selectAll('*').remove();
+        
+        // Use grouped UV data instead of individual hourly data
+        const groupedUVData = this.uvData.grouped || [];
+        console.log('Grouped UV data:', groupedUVData);
+        
+        if (groupedUVData.length === 0) {
+            console.warn('No grouped UV data available');
+            return;
+        }
+        
+        // Create UV arc for each grouped UV index range
+        groupedUVData.forEach((uvGroup, index) => {
+            // Use the start and end hours from the group
+            const startHour = uvGroup.startHour;
+            const endHour = uvGroup.endHour;
+            
+            // Debug UV positioning
+            console.log(`UV Group ${index}:`, {
+                uvIndex: uvGroup.uvIndex,
+                timeRange: `${uvGroup.startTime.getHours()}:00-${uvGroup.endTime.getHours()}:00`,
+                hourCount: uvGroup.hours.length,
+                startHour: startHour,
+                endHour: endHour,
+                startAngle: this.hourToAngle(startHour) * 180 / Math.PI,
+                endAngle: this.hourToAngle(endHour) * 180 / Math.PI
+            });
+            
+            // Add minimal padding between UV segments to reduce gaps
+            const segmentPadding = 0.005; // Very small gap between segments (in hour units)
+            const paddedStartHour = startHour + segmentPadding;
+            const paddedEndHour = endHour - segmentPadding;
+            
+            const uvAngles = this.spanToAngles(paddedStartHour, paddedEndHour);
+            
+            // Enhanced debugging: Log D3 arc angles in degrees for comparison
+            console.log(`UV Arc ${index} D3 Angles:`, {
+                startAngleDegrees: uvAngles.startAngle * 180 / Math.PI,
+                endAngleDegrees: uvAngles.endAngle * 180 / Math.PI,
+                startAngleRadians: uvAngles.startAngle,
+                endAngleRadians: uvAngles.endAngle,
+                hourSpan: `${paddedStartHour.toFixed(2)} to ${paddedEndHour.toFixed(2)}`
+            });
+            
+            // Calculate dynamic radius based on UV index using structured min/max approach
+            const baseInnerRadius = this.innerRadius;
+            
+            // New approach: min width = middle of sun arc, max width = middle of moon arc
+            const minRadius = (this.innerRadius + this.middleRadius) / 2; // Mid-sun arc
+            const maxRadius = (this.middleRadius + this.outerRadius) / 2;  // Mid-moon arc
+            const uvSteps = 12; // UV scale typically 0-11+ (allowing for extreme values)
+            const stepSize = (maxRadius - minRadius) / uvSteps;
+            
+            // Calculate outer radius based on UV index with structured scaling
+            const uvOuterRadius = minRadius + (stepSize * uvGroup.uvIndex);
+            
+            console.log(`UV Arc ${index} Width Calculation:`, {
+                uvIndex: uvGroup.uvIndex,
+                minRadius: minRadius,
+                maxRadius: maxRadius,
+                stepSize: stepSize,
+                calculatedOuterRadius: uvOuterRadius,
+                actualWidth: uvOuterRadius - baseInnerRadius
+            });
+            
+            // Position UV arcs starting from inner radius
+            const arcGenerator = d3.arc()
+                .innerRadius(baseInnerRadius)
+                .outerRadius(uvOuterRadius); // No artificial cap, uses calculated radius
+            
+            const uvArc = arcGenerator(uvAngles);
+            
+            // Create the UV arc - disable pointer events so solar arc hover works underneath
+            const arcElement = this.uvLayer.append('path')
+                .attr('d', uvArc)
+                .attr('fill', this.getUVGradientId(uvGroup.uvIndex))
+                .attr('class', 'uv-arc')
+                .attr('opacity', 0)
+                .style('pointer-events', 'none'); // Allow clicks/hover to pass through to solar arc
+            
+            // Add UV index text label inside the arc
+            const centerHour = startHour + (endHour - startHour) / 2;
+            const centerAngle = this.angleForTrig(centerHour);
+            const textRadius = (baseInnerRadius + uvOuterRadius) / 2; // Middle of the UV arc
+            
+            const textX = Math.cos(centerAngle) * textRadius;
+            const textY = Math.sin(centerAngle) * textRadius;
+            
+            // Calculate rotation angle for text to point toward center (perpendicular to arc)
+            const rotationAngle = centerAngle * 180 / Math.PI; // Convert radians to degrees
+            // Add 90 degrees to make text perpendicular to arc, then 180 to flip right-side up
+            // Before noon: lean left, After noon: lean right, pointing toward center
+            const textRotation = rotationAngle + 90 + 180;
+            
+            const uvText = this.uvLayer.append('text')
+                .attr('x', textX)
+                .attr('y', textY)
+                .attr('text-anchor', 'middle')
+                .attr('dominant-baseline', 'central')
+                .attr('class', 'uv-text')
+                .attr('font-size', '14px')
+                .attr('font-weight', 'bold')
+                .attr('fill', 'white')
+                .attr('opacity', 0)
+                .attr('transform', `rotate(${textRotation}, ${textX}, ${textY})`) // Rotate text to match arc
+                .style('pointer-events', 'none') // Same as UV arcs - don't interfere with hover
+                .style('filter', 'drop-shadow(1px 1px 4px rgba(0,0,0,0.9))') // Add shadow for better visibility
+                .text(uvGroup.uvIndex);
+            
+            // Animate both the arc and text appearance
+            arcElement
+                .transition()
+                .duration(300)
+                .attr('opacity', 1.0);
+                
+            uvText
+                .transition()
+                .duration(300)
+                .attr('opacity', 1.0);
+        });
+    }
+    
+    getUVCategory(uvi) {
+        if (uvi <= 2) return { name: "Low", color: "#289500" };
+        if (uvi <= 5) return { name: "Moderate", color: "#F7E400" };
+        if (uvi <= 7) return { name: "High", color: "#F85900" };
+        if (uvi <= 10) return { name: "Very High", color: "#D8001D" };
+        return { name: "Extreme", color: "#6B49C8" };
+    }
+    
+    hideUVArcs() {
+        // Restore the solar arc
+        const dayArcElement = this.sunLayer.select('.day-arc');
+        console.log('Day arc element found for restoring:', !dayArcElement.empty());
+        
+        dayArcElement
+            .transition()
+            .duration(200)
+            .attr('opacity', 1);
+        
+        // Remove all UV arcs and text labels (no hover areas anymore since they use pointer-events: none)
+        this.uvLayer.selectAll('.uv-arc, .uv-text')
+            .transition()
+            .duration(200)
+            .attr('opacity', 0)
+            .remove();
+        
+        // Also remove any tooltips
+        this.g.selectAll('.uv-tooltip').remove();
     }
 }

@@ -1,6 +1,7 @@
 class AstronomicalAPI {
     constructor() {
         this.apiKey = localStorage.getItem('ipGeoApiKey') || '';
+        this.openWeatherApiKey = localStorage.getItem('openWeatherApiKey') || '';
         this.userLocation = this.loadUserLocation();
         this.cache = new Map();
         this.cacheTimeout = 6 * 60 * 60 * 1000; // 6 hours in ms
@@ -10,6 +11,11 @@ class AstronomicalAPI {
     setApiKey(apiKey) {
         this.apiKey = apiKey;
         localStorage.setItem('ipGeoApiKey', apiKey);
+    }
+    
+    setOpenWeatherApiKey(apiKey) {
+        this.openWeatherApiKey = apiKey;
+        localStorage.setItem('openWeatherApiKey', apiKey);
     }
     
     setUserLocation(location) {
@@ -30,9 +36,8 @@ class AstronomicalAPI {
         // Check if user has previously denied location or we have a saved preference
         const locationPermissionDenied = localStorage.getItem('locationPermissionDenied') === 'true';
         if (locationPermissionDenied) {
-            const defaultLocation = { lat: 40.7128, lng: -74.0060 };
-            this.setUserLocation(defaultLocation);
-            return defaultLocation;
+            // No default location - require explicit user action
+            throw new Error('Location access denied. Please enable location sharing or enter coordinates manually in Settings.');
         }
         
         // Try to get user's location via geolocation API
@@ -51,9 +56,8 @@ class AstronomicalAPI {
                     (error) => {
                         // User denied location or error occurred
                         localStorage.setItem('locationPermissionDenied', 'true');
-                        const defaultLocation = { lat: 40.7128, lng: -74.0060 };
-                        this.setUserLocation(defaultLocation);
-                        resolve(defaultLocation);
+                        // No default location - reject with clear message
+                        resolve(null);
                     },
                     {
                         timeout: 10000,
@@ -61,10 +65,8 @@ class AstronomicalAPI {
                     }
                 );
             } else {
-                // Geolocation not supported, use default location
-                const defaultLocation = { lat: 40.7128, lng: -74.0060 };
-                this.setUserLocation(defaultLocation);
-                resolve(defaultLocation);
+                // Geolocation not supported, no default location
+                resolve(null);
             }
         });
     }
@@ -104,6 +106,9 @@ class AstronomicalAPI {
     
     async fetchFromAPI(endpoint, params) {
         const location = await this.getCurrentLocation();
+        if (!location) {
+            throw new Error('Location required. Please enable location sharing or enter coordinates manually in Settings.');
+        }
         const baseUrl = 'https://api.ipgeolocation.io/astronomy';
         
         const urlParams = new URLSearchParams({
@@ -226,6 +231,308 @@ class AstronomicalAPI {
         return 'Waning Crescent';
     }
     
+    async getHistoricalUVData(startTime, endTime) {
+        if (!this.openWeatherApiKey) {
+            console.log('No OpenWeatherMap API key available for historical UV data');
+            return [];
+        }
+        
+        try {
+            const location = await this.getCurrentLocation();
+            if (!location) {
+                throw new Error('Location required for historical UV data');
+            }
+            
+            const historicalData = [];
+            const cacheKey = `historical_uv_${startTime.toDateString()}`;
+            
+            // Check cache first
+            const cached = this.cache.get(cacheKey);
+            if (cached && this.isCacheValid(cached)) {
+                console.log('Using cached historical UV data for', startTime.toDateString());
+                return cached.data;
+            }
+            
+            console.log('Fetching historical UV data from', startTime.toLocaleString(), 'to', endTime.toLocaleString());
+            
+            // Make timemachine API calls for each hour - limit concurrent requests
+            const promises = [];
+            const current = new Date(startTime);
+            let hourCount = 0;
+            const maxHours = 12; // Limit historical requests to prevent API abuse
+            
+            while (current <= endTime && hourCount < maxHours) {
+                const timestamp = Math.floor(current.getTime() / 1000); // Unix timestamp
+                const url = `https://api.openweathermap.org/data/3.0/onecall/timemachine?lat=${location.lat}&lon=${location.lng}&dt=${timestamp}&appid=${this.openWeatherApiKey}`;
+                const currentHourForLogging = new Date(current);
+                
+                promises.push(
+                    fetch(url)
+                        .then(response => {
+                            if (!response.ok) {
+                                if (response.status === 429) {
+                                    throw new Error('Rate limited by OpenWeatherMap API');
+                                }
+                                throw new Error(`Historical API request failed: ${response.status}`);
+                            }
+                            return response.json();
+                        })
+                        .then(data => ({
+                            time: new Date(currentHourForLogging),
+                            uv: data.data?.[0]?.uvi || data.uvi || 0, // Handle different response formats
+                            hour: currentHourForLogging.getHours()
+                        }))
+                        .catch(error => {
+                            console.warn('Failed to fetch historical UV for', currentHourForLogging.toLocaleString(), error.message);
+                            // Return null to indicate failure, will be filtered out
+                            return null;
+                        })
+                );
+                
+                current.setHours(current.getHours() + 1);
+                hourCount++;
+            }
+            
+            // Add a small delay between requests to avoid rate limiting
+            if (promises.length > 1) {
+                console.log(`Making ${promises.length} historical UV requests with rate limiting...`);
+            }
+            
+            // Wait for all requests to complete
+            const results = await Promise.all(promises);
+            
+            // Filter out failed requests and zero UV values
+            const validResults = results.filter(result => result !== null && result.uv > 0);
+            historicalData.push(...validResults);
+            
+            // Cache the results
+            this.cache.set(cacheKey, {
+                data: historicalData,
+                timestamp: Date.now()
+            });
+            
+            console.log(`Fetched ${historicalData.length} hours of historical UV data`);
+            return historicalData;
+            
+        } catch (error) {
+            console.error('Failed to fetch historical UV data:', error);
+            return [];
+        }
+    }
+    
+    async getUVForecast(date = new Date()) {
+        if (!this.openWeatherApiKey) {
+            console.log('No OpenWeatherMap API key available for UV data');
+            return this.getFallbackUVData();
+        }
+        
+        try {
+            const location = await this.getCurrentLocation();
+            if (!location) {
+                throw new Error('Location required for UV forecast. Please enable location sharing or enter coordinates manually in Settings.');
+            }
+            
+            const cached = this.cache.get(`uv_complete_${date.toDateString()}`);
+            if (cached && this.isCacheValid(cached)) {
+                console.log('Using cached complete UV data');
+                return cached.data;
+            }
+            
+            console.log('Fetching complete UV data (historical + forecast) from OpenWeatherMap API');
+            
+            // Get current time and day boundaries
+            const now = new Date();
+            const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            const tomorrowStart = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000);
+            
+            // Get sun data to determine daylight hours
+            const sunData = await this.getSunData(date);
+            const sunriseHour = sunData.sunrise.getHours();
+            const currentHour = now.getHours();
+            
+            let allHourlyData = [];
+            
+            // 1. Get historical data for past daylight hours (sunrise to current hour)
+            if (currentHour > sunriseHour) {
+                const historicalStart = new Date(todayStart);
+                historicalStart.setHours(sunriseHour, 0, 0, 0);
+                
+                const historicalEnd = new Date(now);
+                historicalEnd.setMinutes(0, 0, 0); // Round to current hour start
+                
+                console.log('Fetching historical UV data from', historicalStart.toLocaleString(), 'to', historicalEnd.toLocaleString());
+                const historicalData = await this.getHistoricalUVData(historicalStart, historicalEnd);
+                allHourlyData.push(...historicalData);
+            }
+            
+            // 2. Get forecast data for current hour onwards
+            const forecastUrl = `https://api.openweathermap.org/data/3.0/onecall?lat=${location.lat}&lon=${location.lng}&exclude=minutely,alerts&units=metric&appid=${this.openWeatherApiKey}`;
+            const forecastResponse = await fetch(forecastUrl);
+            
+            if (!forecastResponse.ok) {
+                throw new Error(`Forecast API request failed: ${forecastResponse.status}`);
+            }
+            
+            const forecastData = await forecastResponse.json();
+            
+            // Process forecast data - include current hour through tomorrow morning
+            const forecastHourly = forecastData.hourly?.slice(0, 48)
+                .map(hour => ({
+                    time: new Date(hour.dt * 1000),
+                    uv: hour.uvi || 0,
+                    hour: new Date(hour.dt * 1000).getHours()
+                }))
+                .filter(hour => {
+                    // Include current hour onwards through tomorrow morning
+                    return hour.time >= new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours()) 
+                           && hour.time < new Date(tomorrowStart.getTime() + 6 * 60 * 60 * 1000);
+                }) || [];
+            
+            allHourlyData.push(...forecastHourly);
+            
+            // 3. Sort by time and remove duplicates
+            allHourlyData.sort((a, b) => a.time - b.time);
+            
+            // Remove duplicates (prefer historical data over forecast for same hour)
+            const uniqueHourlyData = [];
+            const seenHours = new Set();
+            
+            for (const hourData of allHourlyData) {
+                const hourKey = `${hourData.time.getDate()}_${hourData.time.getHours()}`;
+                if (!seenHours.has(hourKey)) {
+                    seenHours.add(hourKey);
+                    uniqueHourlyData.push(hourData);
+                }
+            }
+            
+            // 4. Group consecutive hours with same UV index for fine-grained arcs
+            const groupedUVData = this.groupUVDataByIndex(uniqueHourlyData);
+            
+            const uvData = {
+                current: forecastData.current?.uvi || 0,
+                hourly: uniqueHourlyData,
+                grouped: groupedUVData, // Add grouped data for arc rendering
+                daily: forecastData.daily?.slice(0, 7).map(day => ({
+                    date: new Date(day.dt * 1000),
+                    maxUv: day.uvi || 0
+                })) || []
+            };
+            
+            // Cache the complete result
+            this.cache.set(`uv_complete_${date.toDateString()}`, {
+                data: uvData,
+                timestamp: Date.now()
+            });
+            
+            console.log(`Complete UV data: ${uniqueHourlyData.length} hours, ${groupedUVData.length} grouped arcs`);
+            return uvData;
+            
+        } catch (error) {
+            console.error('Failed to fetch complete UV data:', error);
+            return this.getFallbackUVData();
+        }
+    }
+    
+    groupUVDataByIndex(hourlyData) {
+        if (!hourlyData || hourlyData.length === 0) return [];
+        
+        const grouped = [];
+        let currentGroup = null;
+        
+        for (const hourData of hourlyData) {
+            // Round UV index to nearest 0.5 for grouping (prevents too many tiny segments)
+            const roundedUV = Math.round(hourData.uv * 2) / 2;
+            
+            if (!currentGroup || currentGroup.uvIndex !== roundedUV) {
+                // Start a new group
+                if (currentGroup) {
+                    grouped.push(currentGroup);
+                }
+                
+                currentGroup = {
+                    uvIndex: roundedUV,
+                    startTime: hourData.time,
+                    endTime: new Date(hourData.time.getTime() + 60 * 60 * 1000), // +1 hour
+                    startHour: hourData.time.getHours() + hourData.time.getMinutes() / 60,
+                    endHour: hourData.time.getHours() + 1 + hourData.time.getMinutes() / 60,
+                    hours: [hourData]
+                };
+            } else {
+                // Extend current group
+                currentGroup.endTime = new Date(hourData.time.getTime() + 60 * 60 * 1000); // +1 hour from this hour
+                currentGroup.endHour = hourData.time.getHours() + 1 + hourData.time.getMinutes() / 60;
+                currentGroup.hours.push(hourData);
+            }
+        }
+        
+        // Don't forget the last group
+        if (currentGroup) {
+            grouped.push(currentGroup);
+        }
+        
+        // Filter out groups with UV index 0 (no UV)
+        const filteredGroups = grouped.filter(group => group.uvIndex > 0);
+        
+        console.log('UV index grouping result:', {
+            originalHours: hourlyData.length,
+            groupedArcs: filteredGroups.length,
+            groups: filteredGroups.map(g => ({
+                uvIndex: g.uvIndex,
+                timeRange: `${g.startTime.getHours()}:00-${g.endTime.getHours()}:00`,
+                hourCount: g.hours.length
+            }))
+        });
+        
+        return filteredGroups;
+    }
+    
+    getFallbackUVData() {
+        // Simple fallback UV data - assumes moderate UV during daylight hours
+        const now = new Date();
+        const hourly = [];
+        
+        // Generate 24 hours of fallback UV data
+        for (let i = 0; i < 24; i++) {
+            const hour = new Date(now.getTime() + (i * 60 * 60 * 1000));
+            const hourOfDay = hour.getHours();
+            
+            let uvValue = 0;
+            // Simple daylight UV simulation
+            if (hourOfDay >= 6 && hourOfDay <= 18) {
+                // Peak UV around noon, lower in morning/evening
+                const distanceFromNoon = Math.abs(12 - hourOfDay);
+                uvValue = Math.max(0, 8 - (distanceFromNoon * 1.2));
+            }
+            
+            hourly.push({
+                time: hour,
+                uv: uvValue,
+                hour: hourOfDay
+            });
+        }
+        
+        // Group the fallback data like the real API data
+        const grouped = this.groupUVDataByIndex(hourly.filter(h => h.uv > 0));
+        
+        return {
+            current: hourly.find(h => h.hour === now.getHours())?.uv || 0,
+            hourly: hourly,
+            grouped: grouped, // Add grouped fallback data
+            daily: [{
+                date: now,
+                maxUv: Math.max(...hourly.map(h => h.uv))
+            }]
+        };
+    }
+    
+    getUVCategory(uvi) {
+        if (uvi <= 2) return { name: "Low", color: "#289500" };
+        if (uvi <= 5) return { name: "Moderate", color: "#F7E400" };
+        if (uvi <= 7) return { name: "High", color: "#F85900" };
+        if (uvi <= 10) return { name: "Very High", color: "#D8001D" };
+        return { name: "Extreme", color: "#6B49C8" };
+    }
+    
     async getExtendedAstronomicalData() {
         try {
             const today = new Date();
@@ -241,10 +548,12 @@ class AstronomicalAPI {
             console.log('Fetching fresh astronomical data for:', dateKey);
             const sunData = await this.getSunData(today);
             const moonData = await this.getMoonData(today);
+            const uvData = await this.getUVForecast(today);
             
             const data = {
                 sun: sunData,
                 moon: moonData,
+                uv: uvData,
                 location: await this.getCurrentLocation(),
                 lastUpdate: new Date()
             };

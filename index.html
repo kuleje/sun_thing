@@ -28,6 +28,11 @@
                 <small><a href="https://ipgeolocation.io/" target="_blank">Get free API key</a></small>
             </div>
             <div class="setting-group">
+                <label for="openWeatherApiKey">OpenWeatherMap API Key (UV data):</label>
+                <input type="text" id="openWeatherApiKey" placeholder="Your OpenWeatherMap API key">
+                <small><a href="https://openweathermap.org/api" target="_blank">Get free API key for UV forecasts</a></small>
+            </div>
+            <div class="setting-group">
                 <button id="saveSettings" class="save-btn">Save Settings</button>
                 <button id="closeSettings" class="close-btn">Close</button>
             </div>
@@ -35,6 +40,7 @@
         
         <div class="info-panel">
             <p id="status">Loading astronomical data...</p>
+            <p id="location-display"></p>
         </div>
     </div>
 

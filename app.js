@@ -84,6 +84,8 @@ class SunMoonApp {
             this.timeCircle.updateSunData(data.sun);
             console.log('Updating time circle with moon data:', data.moon);
             this.timeCircle.updateMoonData(data.moon);
+            console.log('Updating time circle with UV data:', data.uv);
+            this.timeCircle.updateUVData(data.uv);
             
             // Calculate additional information
             await this.calculateExtendedInfo();
@@ -91,10 +93,20 @@ class SunMoonApp {
             // Update center display with all information
             this.updateCenterDisplay();
             
+            // Display current location being used
+            this.updateLocationDisplay(data.location);
             this.updateStatus('Data loaded successfully');
             
         } catch (error) {
             console.error('Failed to load astronomical data:', error);
+            
+            // Check if it's a location error
+            if (error.message.includes('Location required') || error.message.includes('location')) {
+                this.updateStatus('⚠️ Location required for accurate data. Please check Settings to enable location or enter coordinates.');
+                this.updateLocationDisplay(null);
+                return;
+            }
+            
             this.updateStatus('Failed to load data. Using fallback calculations.');
             
             // Try to work with fallback data
@@ -105,6 +117,7 @@ class SunMoonApp {
                 this.currentData = fallbackData;
                 this.timeCircle.updateSunData(fallbackData.sun);
                 this.timeCircle.updateMoonData(fallbackData.moon);
+                this.timeCircle.updateUVData(fallbackData.uv);
                 this.updateCenterDisplay();
             } catch (fallbackError) {
                 console.error('Fallback data error:', fallbackError);
@@ -162,13 +175,25 @@ class SunMoonApp {
                 .text(`☀️ ${dayLength ? dayLength.formatted : '---'}`);
         }
         
+        // UV information
+        if (this.currentData.uv) {
+            const currentUV = this.currentData.uv.current;
+            const uvCategory = this.api.getUVCategory(currentUV);
+            
+            this.timeCircle.centerInfo.append('text')
+                .attr('class', 'uv-info')
+                .attr('y', 5)
+                .attr('fill', uvCategory.color)
+                .text(`🌞 UV: ${currentUV.toFixed(1)} (${uvCategory.name})`);
+        }
+        
         // Moon information
         if (this.currentData.moon) {
             const moonEmoji = this.calculations.getMoonPhaseEmoji(this.currentData.moon.moonPhase);
             
             this.timeCircle.centerInfo.append('text')
                 .attr('class', 'calculation-info')
-                .attr('y', 5)
+                .attr('y', 25)
                 .text(`${moonEmoji} ${Math.round(this.currentData.moon.illumination)}% lit`);
         }
         
@@ -177,12 +202,12 @@ class SunMoonApp {
             console.log('Displaying next event in center:', this.nextEvent);
             this.timeCircle.centerInfo.append('text')
                 .attr('class', 'calculation-info')
-                .attr('y', 30)
+                .attr('y', 45)
                 .text(`${this.nextEvent.name}:`);
             
             this.timeCircle.centerInfo.append('text')
                 .attr('class', 'calculation-info')
-                .attr('y', 45)
+                .attr('y', 60)
                 .text(`${this.calculations.formatTimeUntilEvent(this.nextEvent.daysUntil)}`);
         } else {
             console.log('No next event found to display');
@@ -192,12 +217,12 @@ class SunMoonApp {
         if (this.matchingDayLength) {
             this.timeCircle.centerInfo.append('text')
                 .attr('class', 'calculation-info')
-                .attr('y', 65)
+                .attr('y', 80)
                 .text(`Same day length:`);
             
             this.timeCircle.centerInfo.append('text')
                 .attr('class', 'calculation-info')
-                .attr('y', 80)
+                .attr('y', 95)
                 .text(`${this.matchingDayLength.date.toLocaleDateString('en-US', { 
                     month: 'short', 
                     day: 'numeric' 
@@ -212,6 +237,7 @@ class SunMoonApp {
         return {
             sun: this.api.getFallbackSunData(now),
             moon: this.api.getFallbackMoonData(now),
+            uv: this.api.getFallbackUVData(now),
             location: location,
             lastUpdate: now
         };
@@ -229,9 +255,11 @@ class SunMoonApp {
     
     loadSettings() {
         const apiKey = localStorage.getItem('ipGeoApiKey') || '';
+        const openWeatherApiKey = localStorage.getItem('openWeatherApiKey') || '';
         const location = localStorage.getItem('userLocation');
         
         document.getElementById('ipGeoApiKey').value = apiKey;
+        document.getElementById('openWeatherApiKey').value = openWeatherApiKey;
         
         if (location) {
             const loc = JSON.parse(location);
@@ -241,12 +269,18 @@ class SunMoonApp {
     
     async saveSettings() {
         const apiKey = document.getElementById('ipGeoApiKey').value.trim();
+        const openWeatherApiKey = document.getElementById('openWeatherApiKey').value.trim();
         const locationInput = document.getElementById('locationInput').value.trim();
         
-        // Save API key
+        // Save API keys
         if (apiKey) {
             this.api.setApiKey(apiKey);
-            this.updateStatus('API key saved');
+            this.updateStatus('IP Geolocation API key saved');
+        }
+        
+        if (openWeatherApiKey) {
+            this.api.setOpenWeatherApiKey(openWeatherApiKey);
+            this.updateStatus('OpenWeatherMap API key saved');
         }
         
         // Parse and save location
@@ -295,6 +329,17 @@ class SunMoonApp {
                 statusElement.textContent = '';
             }
         }, 5000);
+    }
+    
+    updateLocationDisplay(location) {
+        const locationElement = document.getElementById('location-display');
+        if (!location) {
+            locationElement.textContent = '📍 No location set - click Settings to configure';
+            locationElement.style.color = '#ff6b6b';
+        } else {
+            locationElement.textContent = `📍 Location: ${location.lat.toFixed(3)}°, ${location.lng.toFixed(3)}°`;
+            locationElement.style.color = '#51cf66';
+        }
     }
     
     handleResize() {
