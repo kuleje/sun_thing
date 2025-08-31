@@ -350,6 +350,9 @@ class SunMoonApp {
         const size = Math.min(containerRect.width || 1000, window.innerHeight * 0.9, 1200);
         
         this.timeCircle.resize(size, size);
+        
+        // Update center display after resize since it gets cleared during resize
+        this.updateCenterDisplay();
     }
 }
 

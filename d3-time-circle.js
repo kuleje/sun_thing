@@ -32,6 +32,7 @@ class TimeCircle {
         this.sunData = null;
         this.moonData = null;
         this.uvData = null;
+        this.updateIntervalId = null;
         
         this.init();
     }
@@ -483,8 +484,13 @@ class TimeCircle {
     }
     
     setupUpdateInterval() {
+        // Clear any existing interval to prevent duplicates
+        if (this.updateIntervalId) {
+            clearInterval(this.updateIntervalId);
+        }
+        
         this.updateCurrentTime();
-        setInterval(() => {
+        this.updateIntervalId = setInterval(() => {
             this.updateCurrentTime();
         }, 60000); // Update every minute
     }
@@ -503,6 +509,9 @@ class TimeCircle {
         
         this.g
             .attr('transform', `translate(${this.width/2}, ${this.height/2})`);
+        
+        // Clear all existing elements before recreating to prevent duplicates
+        this.g.selectAll('*').remove();
         
         // Redraw everything with new dimensions
         this.createStaticElements();
