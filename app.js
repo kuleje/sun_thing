@@ -602,7 +602,8 @@ class SunMoonApp {
                     console.log('Calculating matching day length for selected date:', selectedDate, dayLength);
                     this.matchingDayLength = await this.calculations.findMatchingDayLength(
                         dayLength,
-                        this.currentData.location
+                        this.currentData.location,
+                        selectedDate
                     );
                     console.log('Found matching day length for selected date:', this.matchingDayLength);
                 } else {

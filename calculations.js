@@ -110,14 +110,14 @@ class AstronomicalCalculations {
         };
     }
     
-    async findMatchingDayLength(currentDayLength, userLocation) {
+    async findMatchingDayLength(currentDayLength, userLocation, referenceDate = null) {
         if (!currentDayLength || !currentDayLength.totalMinutes) {
             console.log('No current day length or totalMinutes:', currentDayLength);
             return null;
         }
         
         const targetMinutes = currentDayLength.totalMinutes;
-        const today = new Date();
+        const today = referenceDate || new Date();
         const currentDayOfYear = this.getDayOfYear(today);
         
         console.log('Searching for closest matching day length:', {
@@ -159,7 +159,7 @@ class AstronomicalCalculations {
                     date: new Date(testDate),
                     dayLength: testDayLength,
                     difference: difference,
-                    daysFromToday: daysAhead
+                    daysFromToday: Math.ceil((testDate - today) / AppConfig.ASTRONOMY.DAY_TO_MS)
                 };
                 
                 // Log good matches for debugging
