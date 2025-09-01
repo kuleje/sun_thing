@@ -245,6 +245,29 @@ class TimeCircle {
         // Clear previous sun arcs
         this.sunLayer.selectAll('*').remove();
         
+        // Handle polar regions where sun may not rise/set
+        if (!this.sunData.sunrise || !this.sunData.sunset) {
+            console.log('Polar region detected - no sunrise/sunset times');
+            
+            // Create full circle arc for polar day/night conditions
+            const fullCircleArc = arcGenerator({ startAngle: 0, endAngle: 2 * Math.PI });
+            
+            // Determine if it's polar day (sun always up) or polar night (sun always down)
+            // Check sun altitude at noon to determine this
+            const isPolarDay = this.sunData.sunAltitude > 0; // If sun is above horizon at solar noon
+            
+            this.sunLayer.append('path')
+                .attr('d', fullCircleArc)
+                .attr('fill', isPolarDay ? 'url(#dayGradient)' : 'url(#nightGradient)')
+                .attr('class', `sun-arc ${isPolarDay ? 'polar-day-arc' : 'polar-night-arc'}`)
+                .style('cursor', 'pointer');
+            
+            // Add status text for polar conditions
+            this.addCurvedSunStatusText(isPolarDay ? 'Sun visible all day' : 'Sun below horizon all day');
+            
+            return;
+        }
+        
         const sunriseHour = this.sunData.sunrise.getHours() + this.sunData.sunrise.getMinutes() / 60;
         const sunsetHour = this.sunData.sunset.getHours() + this.sunData.sunset.getMinutes() / 60;
         
@@ -1142,6 +1165,42 @@ class TimeCircle {
         this.moonLayer.append('text')
             .attr('class', 'moon-status-text')
             .attr('font-size', '16px')
+            .attr('fill', 'rgba(255, 255, 255, 0.9)')
+            .attr('font-weight', 'normal')
+            .append('textPath')
+            .attr('href', `#${textPathId}`)
+            .attr('text-anchor', 'middle')
+            .attr('startOffset', '50%')
+            .style('filter', 'drop-shadow(1px 1px 4px rgba(0,0,0,0.9))') // Add shadow for better visibility
+            .text(text);
+    }
+    
+    /**
+     * Add curved text following the circle at the sun arc level for sun status messages
+     * @param {string} text - The text to display
+     */
+    addCurvedSunStatusText(text) {
+        // Position text at the sun arc level (middle of the sun band)
+        const textRadius = (this.innerRadius + this.middleRadius) / 2; // Middle of sun arc band
+        
+        // Create an invisible circular path for text to follow
+        const textPathId = `sun-status-path-${Date.now()}`;
+        
+        // Add defs if it doesn't exist
+        let defs = this.svg.select('defs');
+        if (defs.empty()) {
+            defs = this.svg.append('defs');
+        }
+        
+        defs.append('path')
+            .attr('id', textPathId)
+            .attr('d', `M ${-textRadius * 0.6}, ${-textRadius * 0.8} A ${textRadius} ${textRadius} 0 0 1 ${textRadius * 0.6}, ${-textRadius * 0.8}`)
+            .style('fill', 'none');
+            
+        // Add the curved text following the path
+        this.sunLayer.append('text')
+            .attr('class', 'sun-status-text')
+            .attr('font-size', '14px')
             .attr('fill', 'rgba(255, 255, 255, 0.9)')
             .attr('font-weight', 'normal')
             .append('textPath')

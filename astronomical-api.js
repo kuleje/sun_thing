@@ -714,11 +714,29 @@ class AstronomicalAPI {
             const sunTimes = SunCalc.getTimes(date, lat, lng);
             const sunPosition = SunCalc.getPosition(date, lat, lng);
             
+            // Handle polar regions where sunrise/sunset may be undefined
+            let sunrise = sunTimes.sunrise;
+            let sunset = sunTimes.sunset;
+            let dayLength;
+            
+            if (!sunrise || !sunset || isNaN(sunrise.getTime()) || isNaN(sunset.getTime())) {
+                // Polar region - check sun altitude at solar noon to determine polar day vs night
+                const solarNoonPosition = SunCalc.getPosition(sunTimes.solarNoon || date, lat, lng);
+                const isPolarDay = solarNoonPosition.altitude > 0;
+                
+                // Set sunrise/sunset to null for polar conditions
+                sunrise = null;
+                sunset = null;
+                dayLength = isPolarDay ? "24h 0m" : "0h 0m";
+            } else {
+                dayLength = this.formatDayLength(sunset - sunrise);
+            }
+            
             return {
-                sunrise: sunTimes.sunrise,
-                sunset: sunTimes.sunset,
+                sunrise: sunrise,
+                sunset: sunset,
                 solarNoon: sunTimes.solarNoon,
-                dayLength: this.formatDayLength(sunTimes.sunset - sunTimes.sunrise),
+                dayLength: dayLength,
                 sunAzimuth: sunPosition.azimuth * 180 / Math.PI, // Convert radians to degrees
                 sunAltitude: sunPosition.altitude * 180 / Math.PI // Convert radians to degrees
             };

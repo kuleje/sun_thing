@@ -93,8 +93,32 @@ class AstronomicalCalculations {
     }
     
     calculateDayLength(sunData) {
-        if (!sunData || !sunData.sunrise || !sunData.sunset) {
+        if (!sunData) {
             return null;
+        }
+        
+        // Handle polar regions where sunrise/sunset might be null
+        if (!sunData.sunrise || !sunData.sunset) {
+            // Determine if it's polar day or polar night based on sun altitude
+            const isPolarDay = sunData.sunAltitude > 0;
+            
+            if (isPolarDay) {
+                // Polar day - sun is up 24 hours
+                return {
+                    hours: 24,
+                    minutes: 0,
+                    totalMinutes: 24 * 60,
+                    formatted: "24h 0m"
+                };
+            } else {
+                // Polar night - sun is down 24 hours
+                return {
+                    hours: 0,
+                    minutes: 0,
+                    totalMinutes: 0,
+                    formatted: "0h 0m"
+                };
+            }
         }
         
         const dayLengthMs = sunData.sunset - sunData.sunrise;
