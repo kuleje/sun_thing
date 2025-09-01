@@ -36,6 +36,7 @@ class TimeCircle {
         this.updateIntervalId = null;
         this.selectedDate = new Date(); // Currently selected date
         this.onDateChange = null; // Callback for date changes
+        this.onTimeUpdate = null; // Callback for time updates
         this.yearRotation = 0; // Current rotation angle of the year dial
         
         this.init();
@@ -501,6 +502,10 @@ class TimeCircle {
         this.updateCurrentTime();
         this.updateIntervalId = setInterval(() => {
             this.updateCurrentTime();
+            // Trigger callback to update center display
+            if (this.onTimeUpdate) {
+                this.onTimeUpdate();
+            }
         }, AppConfig.TIMEOUTS.CLOCK_UPDATE_INTERVAL);
     }
     
@@ -1045,5 +1050,12 @@ class TimeCircle {
      */
     setOnDateChange(callback) {
         this.onDateChange = callback;
+    }
+    
+    /**
+     * Set callback for time updates
+     */
+    setOnTimeUpdate(callback) {
+        this.onTimeUpdate = callback;
     }
 }

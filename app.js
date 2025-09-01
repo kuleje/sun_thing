@@ -72,6 +72,11 @@ class SunMoonApp {
         this.timeCircle.setOnDateChange((date) => {
             this.handleDateChange(date);
         });
+        
+        // Set up time update handler for current time display
+        this.timeCircle.setOnTimeUpdate(() => {
+            this.handleTimeUpdate();
+        });
     }
     
     async loadAstronomicalData() {
@@ -524,6 +529,16 @@ class SunMoonApp {
                 .attr('class', 'calculation-info')
                 .attr('y', 95)
                 .text(`${this.calculations.formatTimeUntilEvent(this.nextEvent.daysUntil)}`);
+        }
+    }
+    
+    /**
+     * Handle time updates - only update center display if showing current date
+     */
+    handleTimeUpdate() {
+        // Only update center display if we're showing current date (not a selected historical date)
+        if (this.isCurrentDate(this.timeCircle.selectedDate)) {
+            this.updateCenterDisplay();
         }
     }
     
