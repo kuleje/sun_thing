@@ -375,17 +375,15 @@ class TimeCircle {
         // Clear previous moon arcs
         this.moonLayer.selectAll('*').remove();
         
-        // Moon visibility arc using GPT-5's approach
+        // Moon visibility arc using enhanced approach with edge case handling
         if (this.moonData.moonrise && this.moonData.moonset) {
+            // Normal case: moon rises and sets
             const moonriseHour = this.moonData.moonrise.getHours() + this.moonData.moonrise.getMinutes() / 60;
             const moonsetHour = this.moonData.moonset.getHours() + this.moonData.moonset.getMinutes() / 60;
             
             // Use GPT-5's spanToAngles method to handle wrap-around automatically
             const moonAngles = this.spanToAngles(moonriseHour, moonsetHour);
             const moonArc = arcGenerator(moonAngles);
-            
-            // Check if this is current date for styling
-            const isCurrentDate = this.selectedDate.toDateString() === new Date().toDateString();
             
             this.moonLayer.append('path')
                 .attr('d', moonArc)
@@ -406,54 +404,69 @@ class TimeCircle {
                         .duration(200)
                         .attr('opacity', 0);
                 });
+        } else if (!this.moonData.moonrise && !this.moonData.moonset) {
+            // Special case: moon doesn't rise or set (stays below horizon all day)
+            this.addCurvedMoonStatusText('Moon below horizon all day');
+        } else {
+            // Moon is visible all day (either rises but doesn't set, or sets but doesn't rise)
+            const fullArc = arcGenerator({ startAngle: 0, endAngle: 2 * Math.PI });
             
-            // Add moonrise label ON the arc if available
-            if (this.moonData.moonrise) {
-                const moonriseAngle = this.angleForTrig(moonriseHour);
-                const moonArcRadius = (this.middleRadius + 10 + this.outerRadius) / 2; // Middle of moon arc
-                const moonriseX = Math.cos(moonriseAngle) * moonArcRadius;
-                const moonriseY = Math.sin(moonriseAngle) * moonArcRadius;
-                const moonriseRotation = this.getTextRotation(moonriseAngle);
+            this.moonLayer.append('path')
+                .attr('d', fullArc)
+                .attr('fill', 'url(#moonGradient)')
+                .attr('fill-opacity', this.moonData.illumination / 100)
+                .attr('class', 'moon-arc full-arc')
+                .attr('stroke-dasharray', 'none');
                 
-                this.moonLayer.append('text')
-                    .attr('class', 'arc-label moonrise-label')
-                    .attr('x', moonriseX)
-                    .attr('y', moonriseY)
-                    .attr('text-anchor', 'middle')
-                    .attr('dominant-baseline', 'central')
-                    .attr('fill', 'rgba(245, 245, 220, 0.9)')
-                    .attr('font-size', '12px')
-                    .attr('font-weight', 'bold')
-                    .attr('transform', `rotate(${moonriseRotation}, ${moonriseX}, ${moonriseY})`)
-                    .attr('opacity', 0)  // Hidden by default - will show on hover
-                    .text(`🌙↑${this.moonData.moonrise.toLocaleTimeString('en-US', { 
-                        hour12: false, hour: '2-digit', minute: '2-digit' 
-                    })}`);
-            }
+            this.addCurvedMoonStatusText('Moon visible all day');
+        }
+        
+        // Add moonrise/moonset labels ON the arc if available (only for normal case)
+        if (this.moonData.moonrise && this.moonData.moonset) {
+            const moonriseHour = this.moonData.moonrise.getHours() + this.moonData.moonrise.getMinutes() / 60;
+            const moonsetHour = this.moonData.moonset.getHours() + this.moonData.moonset.getMinutes() / 60;
             
-            // Add moonset label ON the arc if available
-            if (this.moonData.moonset) {
-                const moonsetAngle = this.angleForTrig(moonsetHour);
-                const moonArcRadius = (this.middleRadius + 10 + this.outerRadius) / 2; // Middle of moon arc
-                const moonsetX = Math.cos(moonsetAngle) * moonArcRadius;
-                const moonsetY = Math.sin(moonsetAngle) * moonArcRadius;
-                const moonsetRotation = this.getTextRotation(moonsetAngle);
-                
-                this.moonLayer.append('text')
-                    .attr('class', 'arc-label moonset-label')
-                    .attr('x', moonsetX)
-                    .attr('y', moonsetY)
-                    .attr('text-anchor', 'middle')
-                    .attr('dominant-baseline', 'central')
-                    .attr('fill', 'rgba(245, 245, 220, 0.9)')
-                    .attr('font-size', '12px')
-                    .attr('font-weight', 'bold')
-                    .attr('transform', `rotate(${moonsetRotation}, ${moonsetX}, ${moonsetY})`)
-                    .attr('opacity', 0)  // Hidden by default - will show on hover
-                    .text(`🌙↓${this.moonData.moonset.toLocaleTimeString('en-US', { 
-                        hour12: false, hour: '2-digit', minute: '2-digit' 
-                    })}`);
-            }
+            const moonriseAngle = this.angleForTrig(moonriseHour);
+            const moonArcRadius = (this.middleRadius + 10 + this.outerRadius) / 2; // Middle of moon arc
+            const moonriseX = Math.cos(moonriseAngle) * moonArcRadius;
+            const moonriseY = Math.sin(moonriseAngle) * moonArcRadius;
+            const moonriseRotation = this.getTextRotation(moonriseAngle);
+            
+            this.moonLayer.append('text')
+                .attr('class', 'arc-label moonrise-label')
+                .attr('x', moonriseX)
+                .attr('y', moonriseY)
+                .attr('text-anchor', 'middle')
+                .attr('dominant-baseline', 'central')
+                .attr('fill', 'rgba(245, 245, 220, 0.9)')
+                .attr('font-size', '12px')
+                .attr('font-weight', 'bold')
+                .attr('transform', `rotate(${moonriseRotation}, ${moonriseX}, ${moonriseY})`)
+                .attr('opacity', 0)  // Hidden by default - will show on hover
+                .text(`🌙↑${this.moonData.moonrise.toLocaleTimeString('en-US', { 
+                    hour12: false, hour: '2-digit', minute: '2-digit' 
+                })}`);
+            
+            // Add moonset label ON the arc  
+            const moonsetAngle = this.angleForTrig(moonsetHour);
+            const moonsetX = Math.cos(moonsetAngle) * moonArcRadius;
+            const moonsetY = Math.sin(moonsetAngle) * moonArcRadius;
+            const moonsetRotation = this.getTextRotation(moonsetAngle);
+            
+            this.moonLayer.append('text')
+                .attr('class', 'arc-label moonset-label')
+                .attr('x', moonsetX)
+                .attr('y', moonsetY)
+                .attr('text-anchor', 'middle')
+                .attr('dominant-baseline', 'central')
+                .attr('fill', 'rgba(245, 245, 220, 0.9)')
+                .attr('font-size', '12px')
+                .attr('font-weight', 'bold')
+                .attr('transform', `rotate(${moonsetRotation}, ${moonsetX}, ${moonsetY})`)
+                .attr('opacity', 0)  // Hidden by default - will show on hover
+                .text(`🌙↓${this.moonData.moonset.toLocaleTimeString('en-US', { 
+                    hour12: false, hour: '2-digit', minute: '2-digit' 
+                })}`);
         }
     }
     
@@ -1101,5 +1114,41 @@ class TimeCircle {
      */
     setOnDateChangeDebounced(callback) {
         this.onDateChangeDebounced = callback;
+    }
+    
+    /**
+     * Add curved text following the circle at the top (24h mark) for moon status messages
+     * @param {string} text - The text to display
+     */
+    addCurvedMoonStatusText(text) {
+        // Position text at the moon arc level (middle of the moon band)
+        const textRadius = (this.middleRadius - 60 + this.outerRadius) / 2; // Middle of moon arc band
+        
+        // Create an invisible circular path for text to follow
+        const textPathId = `moon-status-path-${Date.now()}`;
+        
+        // Add defs if it doesn't exist
+        let defs = this.svg.select('defs');
+        if (defs.empty()) {
+            defs = this.svg.append('defs');
+        }
+        
+        defs.append('path')
+            .attr('id', textPathId)
+            .attr('d', `M ${-textRadius * 0.5}, ${-textRadius} A ${textRadius} ${textRadius} 0 0 1 ${textRadius * 0.5}, ${-textRadius}`)
+            .style('fill', 'none');
+            
+        // Add the curved text following the path
+        this.moonLayer.append('text')
+            .attr('class', 'moon-status-text')
+            .attr('font-size', '16px')
+            .attr('fill', 'rgba(255, 255, 255, 0.9)')
+            .attr('font-weight', 'normal')
+            .append('textPath')
+            .attr('href', `#${textPathId}`)
+            .attr('text-anchor', 'middle')
+            .attr('startOffset', '50%')
+            .style('filter', 'drop-shadow(1px 1px 4px rgba(0,0,0,0.9))') // Add shadow for better visibility
+            .text(text);
     }
 }
