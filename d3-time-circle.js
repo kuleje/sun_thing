@@ -37,6 +37,8 @@ class TimeCircle {
         this.selectedDate = new Date(); // Currently selected date
         this.onDateChange = null; // Callback for date changes
         this.onTimeUpdate = null; // Callback for time updates
+        this.onDateChangeDebounced = null; // Debounced callback for expensive date operations
+        this.dateChangeTimeout = null; // Timeout ID for debouncing
         this.yearRotation = 0; // Current rotation angle of the year dial
         
         this.init();
@@ -547,6 +549,13 @@ class TimeCircle {
             return;
         }
         
+        // Only show UV arcs for current date - UV data is not accurate for historical/future dates
+        const today = new Date();
+        if (this.selectedDate.toDateString() !== today.toDateString()) {
+            console.log('UV arcs disabled for non-current dates');
+            return;
+        }
+        
         console.log('Showing UV arcs with data:', this.uvData);
         
         // Debug: Log location and timing information
@@ -999,9 +1008,23 @@ class TimeCircle {
         this.selectedDate = new Date(newDate);
         this.updateFixedIndicatorText();
         
-        // Call callback if set
+        // Call immediate callback if set (for UI updates)
         if (this.onDateChange) {
             this.onDateChange(this.selectedDate);
+        }
+        
+        // Call debounced callback for expensive operations (same day length calculation)
+        if (this.onDateChangeDebounced) {
+            // Clear existing timeout
+            if (this.dateChangeTimeout) {
+                clearTimeout(this.dateChangeTimeout);
+            }
+            
+            // Set new timeout
+            this.dateChangeTimeout = setTimeout(() => {
+                this.onDateChangeDebounced(this.selectedDate);
+                this.dateChangeTimeout = null;
+            }, AppConfig.TIMEOUTS.DATE_SELECTION_DEBOUNCE);
         }
     }
     
@@ -1038,9 +1061,23 @@ class TimeCircle {
         this.setDateRotation(date);
         this.updateFixedIndicatorText();
         
-        // Call callback if set
+        // Call immediate callback if set (for UI updates)
         if (this.onDateChange) {
             this.onDateChange(this.selectedDate);
+        }
+        
+        // Call debounced callback for expensive operations
+        if (this.onDateChangeDebounced) {
+            // Clear existing timeout
+            if (this.dateChangeTimeout) {
+                clearTimeout(this.dateChangeTimeout);
+            }
+            
+            // Set new timeout
+            this.dateChangeTimeout = setTimeout(() => {
+                this.onDateChangeDebounced(this.selectedDate);
+                this.dateChangeTimeout = null;
+            }, AppConfig.TIMEOUTS.DATE_SELECTION_DEBOUNCE);
         }
     }
     
@@ -1057,5 +1094,12 @@ class TimeCircle {
      */
     setOnTimeUpdate(callback) {
         this.onTimeUpdate = callback;
+    }
+    
+    /**
+     * Set debounced callback for date changes (for expensive operations like same day length calculation)
+     */
+    setOnDateChangeDebounced(callback) {
+        this.onDateChangeDebounced = callback;
     }
 }

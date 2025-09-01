@@ -147,6 +147,13 @@ body {
     opacity: 0.8;
 }
 
+/* Fixed height status container to prevent layout shifting */
+#status {
+    min-height: 1.2em;
+    margin: 0;
+    transition: opacity 0.3s ease;
+}
+
 /* D3 Circle Styles */
 .time-circle {
     filter: drop-shadow(0 0 20px rgba(255, 255, 255, 0.2));
@@ -177,6 +184,12 @@ body {
     font-size: 2rem;
     font-weight: bold;
     fill: white;
+}
+
+.clickable-now {
+    fill: white !important;
+    font-weight: bold !important;
+    font-size: 2rem !important;
 }
 
 .day-info {

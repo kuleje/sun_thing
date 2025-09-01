@@ -77,6 +77,11 @@ class SunMoonApp {
         this.timeCircle.setOnTimeUpdate(() => {
             this.handleTimeUpdate();
         });
+        
+        // Set up debounced handler for expensive date operations
+        this.timeCircle.setOnDateChangeDebounced((date) => {
+            this.handleDateChangeDebounced(date);
+        });
     }
     
     async loadAstronomicalData() {
@@ -383,9 +388,16 @@ class SunMoonApp {
      */
     async handleDateChange(selectedDate) {
         console.log('Date changed to:', selectedDate);
-        this.updateStatus('Loading data for selected date...');
         
         try {
+            // Check if we're returning to current date
+            if (this.isCurrentDate(selectedDate)) {
+                console.log('Returned to current date, switching to current date mode');
+                // Reload current data and switch to regular current date display
+                await this.loadAstronomicalData();
+                return;
+            }
+            
             // Get astronomical data for the selected date
             const data = await this.api.getExtendedAstronomicalDataForDate(selectedDate);
             console.log('Astronomical data loaded for selected date:', data);
@@ -396,13 +408,11 @@ class SunMoonApp {
             this.timeCircle.updateMoonData(data.moon);
             this.timeCircle.updateUVData(data.uv);
             
-            // Calculate additional information for selected date
+            // Calculate additional information for selected date (without same day length - will be done in debounced handler)
             await this.calculateExtendedInfoForDate(selectedDate);
             
             // Update center display
             this.updateCenterDisplayForDate(selectedDate);
-            
-            this.updateStatus('Data loaded for selected date');
             
         } catch (error) {
             console.error('Failed to load astronomical data for selected date:', error);
@@ -419,8 +429,7 @@ class SunMoonApp {
         // Calculate day length for selected date
         const dayLength = this.calculations.calculateDayLength(this.currentData.sun);
         
-        // For selected dates, show the date itself instead of finding matching day length
-        // since the user is exploring different dates
+        // Reset matching day length - will be calculated in debounced handler
         this.matchingDayLength = null;
         
         // Get next equinox/solstice from the selected date
@@ -446,7 +455,7 @@ class SunMoonApp {
         
         this.timeCircle.centerInfo.append('text')
             .attr('class', 'selected-date')
-            .attr('y', -60)
+            .attr('y', -75)
             .attr('font-size', '18px')
             .attr('fill', AppConfig.COLORS.SELECTED_DATE)
             .text(dateText);
@@ -459,17 +468,28 @@ class SunMoonApp {
             minute: '2-digit' 
         });
         
+        // Add "Now:" prefix to the left of centered time
         this.timeCircle.centerInfo.append('text')
-            .attr('class', 'current-time clickable-now')
-            .attr('y', -35)
-            .attr('font-size', '16px')
+            .attr('class', 'now-prefix')
+            .attr('y', -50)
+            .attr('x', -50)
+            .attr('font-size', '24px')
+            .attr('fill', 'white')
+            .attr('font-weight', 'bold')
+            .attr('text-anchor', 'end')
             .style('cursor', 'pointer')
             .style('text-decoration', 'underline')
-            .text(`Now: ${timeText}`)
+            .text('Now:')
             .on('click', () => {
                 // Reset to current date
                 this.timeCircle.setSelectedDate(new Date());
             });
+        
+        // Keep time centered
+        this.timeCircle.centerInfo.append('text')
+            .attr('class', 'current-time')
+            .attr('y', -50)
+            .text(timeText);
         
         // Sun information for selected date
         if (this.currentData.sun) {
@@ -477,18 +497,37 @@ class SunMoonApp {
             
             this.timeCircle.centerInfo.append('text')
                 .attr('class', 'day-info')
-                .attr('y', -10)
+                .attr('y', -20)
                 .text(`☀️ ${dayLength ? dayLength.formatted : '---'}`);
         }
         
-        // Show day of year
-        const startOfYear = new Date(selectedDate.getFullYear(), 0, 1);
-        const dayOfYear = Math.floor((selectedDate - startOfYear) / (1000 * 60 * 60 * 24)) + 1;
-        
-        this.timeCircle.centerInfo.append('text')
-            .attr('class', 'calculation-info')
-            .attr('y', 15)
-            .text(`Day ${dayOfYear} of ${selectedDate.getFullYear()}`);
+        // Show matching day length if available
+        if (this.matchingDayLength) {
+            const dateStr = this.matchingDayLength.date.toLocaleDateString('en-US', { 
+                month: 'short', 
+                day: 'numeric',
+                year: this.matchingDayLength.date.getFullYear() !== selectedDate.getFullYear() ? 'numeric' : undefined
+            });
+            
+            this.timeCircle.centerInfo.append('text')
+                .attr('class', 'calculation-info')
+                .attr('y', 5)
+                .text(`Same day length:`);
+            
+            this.timeCircle.centerInfo.append('text')
+                .attr('class', 'calculation-info')
+                .attr('y', 20)
+                .text(`${dateStr} (${this.matchingDayLength.daysFromToday} days)`);
+        } else {
+            // Show day of year as fallback
+            const startOfYear = new Date(selectedDate.getFullYear(), 0, 1);
+            const dayOfYear = Math.floor((selectedDate - startOfYear) / (1000 * 60 * 60 * 24)) + 1;
+            
+            this.timeCircle.centerInfo.append('text')
+                .attr('class', 'calculation-info')
+                .attr('y', 5)
+                .text(`Day ${dayOfYear} of ${selectedDate.getFullYear()}`);
+        }
         
         // UV information only for current date (not accurate for other dates)
         const isCurrentDate = this.isCurrentDate(selectedDate);
@@ -498,7 +537,7 @@ class SunMoonApp {
             
             this.timeCircle.centerInfo.append('text')
                 .attr('class', 'uv-info')
-                .attr('y', 40)
+                .attr('y', 45)
                 .attr('fill', uvCategory.color)
                 .text(`🌞 UV: ${currentUV.toFixed(1)} (${uvCategory.name})`);
         }
@@ -513,7 +552,7 @@ class SunMoonApp {
             
             this.timeCircle.centerInfo.append('text')
                 .attr('class', 'calculation-info')
-                .attr('y', 60)
+                .attr('y', 65)
                 .style('opacity', isCurrentDate ? 1 : 0.8)
                 .text(finalText);
         }
@@ -522,12 +561,12 @@ class SunMoonApp {
         if (this.nextEvent) {
             this.timeCircle.centerInfo.append('text')
                 .attr('class', 'calculation-info')
-                .attr('y', 80)
+                .attr('y', 85)
                 .text(`Next: ${this.nextEvent.name}`);
             
             this.timeCircle.centerInfo.append('text')
                 .attr('class', 'calculation-info')
-                .attr('y', 95)
+                .attr('y', 100)
                 .text(`${this.calculations.formatTimeUntilEvent(this.nextEvent.daysUntil)}`);
         }
     }
@@ -539,6 +578,47 @@ class SunMoonApp {
         // Only update center display if we're showing current date (not a selected historical date)
         if (this.isCurrentDate(this.timeCircle.selectedDate)) {
             this.updateCenterDisplay();
+        }
+    }
+    
+    /**
+     * Handle debounced date changes for expensive operations like same day length calculation
+     */
+    async handleDateChangeDebounced(selectedDate) {
+        console.log('Debounced date change triggered for:', selectedDate);
+        
+        try {
+            // Check if we're still on the same selected date and it's not current date
+            if (this.isCurrentDate(selectedDate) || 
+                selectedDate.toDateString() !== this.timeCircle.selectedDate.toDateString()) {
+                console.log('Date changed or returned to current date, skipping debounced operation');
+                return;
+            }
+            
+            // Calculate same day length for selected date (expensive operation)
+            if (this.currentData && this.currentData.sun) {
+                const dayLength = this.calculations.calculateDayLength(this.currentData.sun);
+                
+                if (dayLength) {
+                    console.log('Calculating matching day length for selected date:', selectedDate, dayLength);
+                    this.matchingDayLength = await this.calculations.findMatchingDayLength(
+                        dayLength,
+                        this.currentData.location
+                    );
+                    console.log('Found matching day length for selected date:', this.matchingDayLength);
+                } else {
+                    this.matchingDayLength = null;
+                }
+            }
+            
+            // Update center display with new calculations only if still on same selected date
+            if (selectedDate.toDateString() === this.timeCircle.selectedDate.toDateString() &&
+                !this.isCurrentDate(selectedDate)) {
+                this.updateCenterDisplayForDate(selectedDate);
+            }
+            
+        } catch (error) {
+            console.error('Failed to calculate extended info for debounced date change:', error);
         }
     }
     

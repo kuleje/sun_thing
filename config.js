@@ -12,7 +12,8 @@ class AppConfig {
         CLOCK_UPDATE_INTERVAL: 60000,                 // Clock hand update: 1 minute
         LOCATION_CACHE: 5 * 60 * 1000,                // Location cache: 5 minutes
         API_REQUEST_TIMEOUT: 10000,                   // API request timeout: 10 seconds
-        SETTINGS_RELOAD_DELAY: 1000                   // Delay before reloading data after settings change
+        SETTINGS_RELOAD_DELAY: 1000,                  // Delay before reloading data after settings change
+        DATE_SELECTION_DEBOUNCE: 500                  // Debounce delay for date selection calculations
     };
 
     // ========== VISUALIZATION DIMENSIONS ==========
