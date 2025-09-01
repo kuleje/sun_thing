@@ -392,7 +392,7 @@ class TimeCircle {
                 .attr('fill', 'url(#moonGradient)')
                 .attr('fill-opacity', this.moonData.illumination / 100)
                 .attr('class', 'moon-arc')
-                .attr('stroke-dasharray', isCurrentDate ? 'none' : '5,3')
+                .attr('stroke-dasharray', 'none')
                 .style('cursor', 'pointer')
                 .on('mouseover', () => {
                     this.moonLayer.selectAll('.moonrise-label, .moonset-label')

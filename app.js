@@ -547,14 +547,11 @@ class SunMoonApp {
             const moonEmoji = this.calculations.getMoonPhaseEmoji(this.currentData.moon.moonPhase);
             const moonText = `${moonEmoji} ${Math.round(this.currentData.moon.illumination)}% lit`;
             
-            // Add indicator for approximate data when not current date
-            const finalText = isCurrentDate ? moonText : `${moonText} ~`;
-            
+            // Moon data is now accurate for all dates via SunCalc
             this.timeCircle.centerInfo.append('text')
                 .attr('class', 'calculation-info')
                 .attr('y', 65)
-                .style('opacity', isCurrentDate ? 1 : 0.8)
-                .text(finalText);
+                .text(moonText);
         }
         
         // Next equinox/solstice from selected date
@@ -595,6 +592,8 @@ class SunMoonApp {
                 return;
             }
             
+            console.log('Performing expensive calculations for selected date:', selectedDate.toDateString());
+            
             // Calculate same day length for selected date (expensive operation)
             if (this.currentData && this.currentData.sun) {
                 const dayLength = this.calculations.calculateDayLength(this.currentData.sun);
@@ -615,6 +614,7 @@ class SunMoonApp {
             if (selectedDate.toDateString() === this.timeCircle.selectedDate.toDateString() &&
                 !this.isCurrentDate(selectedDate)) {
                 this.updateCenterDisplayForDate(selectedDate);
+                console.log('Updated center display with debounced calculations');
             }
             
         } catch (error) {

@@ -128,6 +128,15 @@ class AstronomicalAPI {
     }
     
     async getSunData(date = new Date()) {
+        const isToday = this.isCurrentDate(date);
+        
+        // For historical dates, use SunCalc directly to avoid API rate limits
+        if (!isToday) {
+            console.log('Using SunCalc for historical sun data:', date.toDateString());
+            return this.getSunCalcSunData(date);
+        }
+        
+        // For current date, try API first for maximum accuracy
         const dateStr = date.toISOString().split('T')[0];
         
         try {
@@ -142,12 +151,23 @@ class AstronomicalAPI {
                 sunAltitude: isNaN(parseFloat(data.sun_altitude)) ? 0 : parseFloat(data.sun_altitude)
             };
         } catch (error) {
-            console.error('Failed to fetch sun data:', error);
-            return this.getFallbackSunData(date);
+            console.error('Failed to fetch sun data from API:', error);
+            console.log('Falling back to SunCalc for current sun data');
+            // Rate limited or API failed - use SunCalc as fallback
+            return this.getSunCalcSunData(date);
         }
     }
     
     async getMoonData(date = new Date()) {
+        const isToday = this.isCurrentDate(date);
+        
+        // For historical dates, use SunCalc directly to avoid API rate limits
+        if (!isToday) {
+            console.log('Using SunCalc for historical date:', date.toDateString());
+            return this.getSunCalcMoonData(date);
+        }
+        
+        // For current date, try API first for maximum accuracy
         const dateStr = date.toISOString().split('T')[0];
         
         try {
@@ -162,8 +182,10 @@ class AstronomicalAPI {
                 moonAltitude: isNaN(parseFloat(data.moon_altitude)) ? 0 : parseFloat(data.moon_altitude)
             };
         } catch (error) {
-            console.error('Failed to fetch moon data:', error);
-            return this.getFallbackMoonData(date);
+            console.error('Failed to fetch moon data from API:', error);
+            console.log('Falling back to SunCalc for current date');
+            // Rate limited or API failed - use SunCalc as fallback
+            return this.getSunCalcMoonData(date);
         }
     }
     
@@ -636,5 +658,111 @@ class AstronomicalAPI {
         } catch (error) {
             return { success: false, message: error.message };
         }
+    }
+    
+    // ========== SUNCALC INTEGRATION METHODS ==========
+    
+    /**
+     * Get moon data using SunCalc library for accurate local calculations
+     * @param {Date} date - Date for calculations
+     * @returns {Object} Moon data in same format as API
+     */
+    getSunCalcMoonData(date = new Date()) {
+        const location = this.userLocation || AppConfig.ASTRONOMY.DEFAULT_LOCATION;
+        const lat = location.lat;
+        const lng = location.lng;
+        
+        try {
+            // Get moon times for the date
+            const moonTimes = SunCalc.getMoonTimes(date, lat, lng);
+            
+            // Get moon illumination data  
+            const moonIllumination = SunCalc.getMoonIllumination(date);
+            
+            // Get moon position for additional data
+            const moonPosition = SunCalc.getMoonPosition(date, lat, lng);
+            
+            // Convert phase value to phase name
+            const phaseName = this.getSunCalcMoonPhaseName(moonIllumination.phase);
+            
+            return {
+                moonrise: moonTimes.rise || null,
+                moonset: moonTimes.set || null,
+                moonPhase: phaseName,
+                illumination: Math.round(moonIllumination.fraction * 100),
+                moonAzimuth: moonPosition.azimuth * 180 / Math.PI, // Convert radians to degrees
+                moonAltitude: moonPosition.altitude * 180 / Math.PI // Convert radians to degrees
+            };
+        } catch (error) {
+            console.error('SunCalc moon calculation error:', error);
+            // Fallback to basic calculation
+            return this.getFallbackMoonData(date);
+        }
+    }
+    
+    /**
+     * Get sun data using SunCalc library for consistency
+     * @param {Date} date - Date for calculations  
+     * @returns {Object} Sun data in same format as API
+     */
+    getSunCalcSunData(date = new Date()) {
+        const location = this.userLocation || AppConfig.ASTRONOMY.DEFAULT_LOCATION;
+        const lat = location.lat;
+        const lng = location.lng;
+        
+        try {
+            const sunTimes = SunCalc.getTimes(date, lat, lng);
+            const sunPosition = SunCalc.getPosition(date, lat, lng);
+            
+            return {
+                sunrise: sunTimes.sunrise,
+                sunset: sunTimes.sunset,
+                solarNoon: sunTimes.solarNoon,
+                dayLength: this.formatDayLength(sunTimes.sunset - sunTimes.sunrise),
+                sunAzimuth: sunPosition.azimuth * 180 / Math.PI, // Convert radians to degrees
+                sunAltitude: sunPosition.altitude * 180 / Math.PI // Convert radians to degrees
+            };
+        } catch (error) {
+            console.error('SunCalc sun calculation error:', error);
+            return this.getFallbackSunData(date);
+        }
+    }
+    
+    /**
+     * Convert SunCalc moon phase value to descriptive name
+     * @param {number} phase - Phase value from SunCalc (0 to 1)
+     * @returns {string} Moon phase name
+     */
+    getSunCalcMoonPhaseName(phase) {
+        // SunCalc phase: 0 and 1 = new moon, 0.5 = full moon
+        if (phase < 0.0625 || phase > 0.9375) return 'New Moon';
+        if (phase < 0.1875) return 'Waxing Crescent';  
+        if (phase < 0.3125) return 'First Quarter';
+        if (phase < 0.4375) return 'Waxing Gibbous';
+        if (phase < 0.5625) return 'Full Moon';
+        if (phase < 0.6875) return 'Waning Gibbous';
+        if (phase < 0.8125) return 'Last Quarter';
+        return 'Waning Crescent';
+    }
+    
+    /**
+     * Format day length from milliseconds to human readable string
+     * @param {number} lengthMs - Day length in milliseconds
+     * @returns {string} Formatted day length (e.g., "12h 34m")
+     */
+    formatDayLength(lengthMs) {
+        const hours = Math.floor(lengthMs / (1000 * 60 * 60));
+        const minutes = Math.floor((lengthMs % (1000 * 60 * 60)) / (1000 * 60));
+        return `${hours}h ${minutes}m`;
+    }
+    
+    /**
+     * Check if a date is the current date (today)
+     * @param {Date} date - Date to check
+     * @returns {boolean} True if date is today
+     */
+    isCurrentDate(date) {
+        const today = new Date();
+        return date.toDateString() === today.toDateString();
     }
 }
