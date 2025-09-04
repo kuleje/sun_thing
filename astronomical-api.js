@@ -6,6 +6,9 @@ class AstronomicalAPI {
         this.cache = new Map();
         this.cacheTimeout = AppConfig.TIMEOUTS.CACHE_DURATION;
         this.dailyCache = new Map(); // Cache astronomical data per day
+        
+        // Load shared cache from localStorage
+        this.loadSharedCache();
     }
     
     setApiKey(apiKey) {
@@ -26,6 +29,42 @@ class AstronomicalAPI {
     loadUserLocation() {
         const saved = localStorage.getItem('userLocation');
         return saved ? JSON.parse(saved) : null;
+    }
+    
+    loadSharedCache() {
+        try {
+            const sharedCache = localStorage.getItem('sun-moon-cache');
+            if (sharedCache) {
+                const cacheData = JSON.parse(sharedCache);
+                Object.entries(cacheData).forEach(([key, value]) => {
+                    this.cache.set(key, value);
+                });
+            }
+        } catch (error) {
+            console.warn('Failed to load shared cache:', error);
+        }
+    }
+    
+    saveToSharedCache(key, data) {
+        try {
+            // Get existing shared cache
+            const existingCache = JSON.parse(localStorage.getItem('sun-moon-cache') || '{}');
+            
+            // Add/update the new entry
+            existingCache[key] = data;
+            
+            // Clean up old entries (keep only last 50 entries)
+            const entries = Object.entries(existingCache);
+            if (entries.length > 50) {
+                const sortedEntries = entries.sort(([,a], [,b]) => b.timestamp - a.timestamp);
+                const limitedCache = Object.fromEntries(sortedEntries.slice(0, 50));
+                localStorage.setItem('sun-moon-cache', JSON.stringify(limitedCache));
+            } else {
+                localStorage.setItem('sun-moon-cache', JSON.stringify(existingCache));
+            }
+        } catch (error) {
+            console.warn('Failed to save to shared cache:', error);
+        }
     }
     
     async getCurrentLocation() {
@@ -89,10 +128,15 @@ class AstronomicalAPI {
         
         try {
             const data = await this.fetchFromAPI(endpoint, params);
-            this.cache.set(cacheKey, {
+            const cacheEntry = {
                 data: data,
                 timestamp: Date.now()
-            });
+            };
+            this.cache.set(cacheKey, cacheEntry);
+            
+            // Save to shared cache for other tabs
+            this.saveToSharedCache(cacheKey, cacheEntry);
+            
             return data;
         } catch (error) {
             console.error('API fetch error:', error);
@@ -132,7 +176,6 @@ class AstronomicalAPI {
         
         // For historical dates, use SunCalc directly to avoid API rate limits
         if (!isToday) {
-            console.log('Using SunCalc for historical sun data:', date.toDateString());
             return this.getSunCalcSunData(date);
         }
         
@@ -152,7 +195,6 @@ class AstronomicalAPI {
             };
         } catch (error) {
             console.error('Failed to fetch sun data from API:', error);
-            console.log('Falling back to SunCalc for current sun data');
             // Rate limited or API failed - use SunCalc as fallback
             return this.getSunCalcSunData(date);
         }
@@ -163,7 +205,6 @@ class AstronomicalAPI {
         
         // For historical dates, use SunCalc directly to avoid API rate limits
         if (!isToday) {
-            console.log('Using SunCalc for historical date:', date.toDateString());
             return this.getSunCalcMoonData(date);
         }
         
@@ -183,7 +224,6 @@ class AstronomicalAPI {
             };
         } catch (error) {
             console.error('Failed to fetch moon data from API:', error);
-            console.log('Falling back to SunCalc for current date');
             // Rate limited or API failed - use SunCalc as fallback
             return this.getSunCalcMoonData(date);
         }
@@ -256,7 +296,6 @@ class AstronomicalAPI {
     
     async getHistoricalUVData(startTime, endTime) {
         if (!this.openWeatherApiKey) {
-            console.log('No OpenWeatherMap API key available for historical UV data');
             return [];
         }
         
@@ -272,11 +311,9 @@ class AstronomicalAPI {
             // Check cache first
             const cached = this.cache.get(cacheKey);
             if (cached && this.isCacheValid(cached)) {
-                console.log('Using cached historical UV data for', startTime.toDateString());
                 return cached.data;
             }
             
-            console.log('Fetching historical UV data from', startTime.toLocaleString(), 'to', endTime.toLocaleString());
             
             // Make timemachine API calls for each hour - limit concurrent requests
             const promises = [];
@@ -318,7 +355,6 @@ class AstronomicalAPI {
             
             // Add a small delay between requests to avoid rate limiting
             if (promises.length > 1) {
-                console.log(`Making ${promises.length} historical UV requests with rate limiting...`);
             }
             
             // Wait for all requests to complete
@@ -334,7 +370,6 @@ class AstronomicalAPI {
                 timestamp: Date.now()
             });
             
-            console.log(`Fetched ${historicalData.length} hours of historical UV data`);
             return historicalData;
             
         } catch (error) {
@@ -345,7 +380,6 @@ class AstronomicalAPI {
     
     async getUVForecast(date = new Date()) {
         if (!this.openWeatherApiKey) {
-            console.log('No OpenWeatherMap API key available for UV data');
             return this.getFallbackUVData();
         }
         
@@ -357,11 +391,9 @@ class AstronomicalAPI {
             
             const cached = this.cache.get(`uv_complete_${date.toDateString()}`);
             if (cached && this.isCacheValid(cached)) {
-                console.log('Using cached complete UV data');
                 return cached.data;
             }
             
-            console.log('Fetching complete UV data (historical + forecast) from OpenWeatherMap API');
             
             // Get current time and day boundaries
             const now = new Date();
@@ -383,7 +415,6 @@ class AstronomicalAPI {
                 const historicalEnd = new Date(now);
                 historicalEnd.setMinutes(0, 0, 0); // Round to current hour start
                 
-                console.log('Fetching historical UV data from', historicalStart.toLocaleString(), 'to', historicalEnd.toLocaleString());
                 const historicalData = await this.getHistoricalUVData(historicalStart, historicalEnd);
                 allHourlyData.push(...historicalData);
             }
@@ -447,7 +478,6 @@ class AstronomicalAPI {
                 timestamp: Date.now()
             });
             
-            console.log(`Complete UV data: ${uniqueHourlyData.length} hours, ${groupedUVData.length} grouped arcs`);
             return uvData;
             
         } catch (error) {
@@ -495,16 +525,6 @@ class AstronomicalAPI {
         
         // Filter out groups with UV index 0 (no UV)
         const filteredGroups = grouped.filter(group => group.uvIndex > 0);
-        
-        console.log('UV index grouping result:', {
-            originalHours: hourlyData.length,
-            groupedArcs: filteredGroups.length,
-            groups: filteredGroups.map(g => ({
-                uvIndex: g.uvIndex,
-                timeRange: `${g.startTime.getHours()}:00-${g.endTime.getHours()}:00`,
-                hourCount: g.hours.length
-            }))
-        });
         
         return filteredGroups;
     }
@@ -561,11 +581,9 @@ class AstronomicalAPI {
             // Check daily cache first
             const cachedData = this.dailyCache.get(dateKey);
             if (cachedData) {
-                console.log('Using cached daily astronomical data for:', dateKey);
                 return cachedData;
             }
             
-            console.log('Fetching fresh astronomical data for:', dateKey);
             const sunData = await this.getSunData(today);
             const moonData = await this.getMoonData(today);
             const uvData = await this.getUVForecast(today);
@@ -586,7 +604,6 @@ class AstronomicalAPI {
             if (keys.length > 3) {
                 const oldestKey = keys[0];
                 this.dailyCache.delete(oldestKey);
-                console.log('Removed old cached data for:', oldestKey);
             }
             
             return data;
@@ -606,11 +623,9 @@ class AstronomicalAPI {
             // Check daily cache first
             const cachedData = this.dailyCache.get(dateKey);
             if (cachedData) {
-                console.log('Using cached daily astronomical data for:', dateKey);
                 return cachedData;
             }
             
-            console.log('Fetching fresh astronomical data for:', dateKey);
             const sunData = await this.getSunData(date);
             const moonData = await this.getMoonData(date);
             
@@ -636,7 +651,6 @@ class AstronomicalAPI {
                 keys.slice(0, keys.length - 10).forEach(key => {
                     this.dailyCache.delete(key);
                 });
-                console.log('Cleaned up old cached data, keeping last 10 entries');
             }
             
             return data;

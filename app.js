@@ -41,19 +41,25 @@ class SunMoonApp {
         });
         
         // Update data periodically (every hour, since astronomical data changes slowly)
+        // Only update when tab is visible and this tab is the leader
         setInterval(() => {
-            this.loadAstronomicalData();
+            if (!document.hidden && this.isTabLeader()) {
+                this.loadAstronomicalData();
+            }
         }, AppConfig.TIMEOUTS.UPDATE_INTERVAL);
         
         // Also check for date changes more frequently
         setInterval(() => {
             const currentDate = new Date().toDateString();
-            if (this.lastUpdateDate && this.lastUpdateDate !== currentDate) {
+            if (this.lastUpdateDate && this.lastUpdateDate !== currentDate && !document.hidden) {
                 console.log('Date changed, refreshing astronomical data');
                 this.loadAstronomicalData();
             }
             this.lastUpdateDate = currentDate;
         }, AppConfig.TIMEOUTS.DATE_CHECK_INTERVAL);
+        
+        // Set up cross-tab coordination
+        this.setupCrossTabCoordination();
     }
     
     initializeTimeCircle() {
@@ -86,20 +92,47 @@ class SunMoonApp {
     
     async loadAstronomicalData() {
         try {
+            // Check if we should actually load data or wait for shared data
+            if (!this.isTabLeader()) {
+                console.log(`Tab ${this.tabId}: Not leader, checking for existing data...`);
+                
+                // Try to get recent shared data first
+                const sharedData = this.getRecentSharedData();
+                if (sharedData) {
+                    console.log(`Tab ${this.tabId}: Using recent shared data, no API call needed`);
+                    this.handleSharedDataUpdate(sharedData);
+                    return;
+                }
+                
+                // If no recent data, wait a moment for leader to load data
+                console.log(`Tab ${this.tabId}: No recent shared data, waiting for leader...`);
+                setTimeout(() => {
+                    const newSharedData = this.getRecentSharedData();
+                    if (newSharedData) {
+                        console.log(`Tab ${this.tabId}: Received data from leader after waiting`);
+                        this.handleSharedDataUpdate(newSharedData);
+                    } else {
+                        console.log(`Tab ${this.tabId}: No data from leader, promoting to leader and loading`);
+                        this.promoteToLeader();
+                        this.loadAstronomicalData();
+                    }
+                }, 2000);
+                return;
+            }
+            
+            console.log(`Tab ${this.tabId}: Leader tab, loading astronomical data...`);
             this.updateStatus('Loading astronomical data...');
-            console.log('Starting to load astronomical data...');
             
             // Get today's data
             const data = await this.api.getExtendedAstronomicalData();
-            console.log('Astronomical data loaded:', data);
             this.currentData = data;
             
+            // Share data with other tabs
+            this.shareDataWithOtherTabs(data);
+            
             // Update the time circle
-            console.log('Updating time circle with sun data:', data.sun);
             this.timeCircle.updateSunData(data.sun);
-            console.log('Updating time circle with moon data:', data.moon);
             this.timeCircle.updateMoonData(data.moon);
-            console.log('Updating time circle with UV data:', data.uv);
             this.timeCircle.updateUVData(data.uv);
             
             // Calculate additional information
@@ -149,19 +182,15 @@ class SunMoonApp {
         
         // Find matching day length
         if (dayLength) {
-            console.log('Searching for matching day length for:', dayLength);
             this.matchingDayLength = await this.calculations.findMatchingDayLength(
                 dayLength,
                 this.currentData.location
             );
-            console.log('Found matching day length:', this.matchingDayLength);
         } else {
-            console.log('No day length calculated, cannot find matching day length');
         }
         
         // Get next equinox/solstice
         this.nextEvent = this.calculations.getNextEquinoxOrSolstice();
-        console.log('Next equinox/solstice calculated:', this.nextEvent);
     }
     
     updateCenterDisplay() {
@@ -195,9 +224,7 @@ class SunMoonApp {
         }
         
         // Matching day length - moved to be prominent, right after day length
-        console.log('Matching day length data:', this.matchingDayLength);
         if (this.matchingDayLength) {
-            console.log('Displaying matching day length:', this.matchingDayLength.daysFromToday, 'days');
             
             this.timeCircle.centerInfo.append('text')
                 .attr('class', 'calculation-info')
@@ -216,7 +243,6 @@ class SunMoonApp {
                 .attr('y', 20)
                 .text(`${dateStr} (${this.matchingDayLength.daysFromToday} days)`);
         } else {
-            console.log('No matching day length found');
         }
         
         // UV information
@@ -243,7 +269,6 @@ class SunMoonApp {
         
         // Next equinox/solstice
         if (this.nextEvent) {
-            console.log('Displaying next event in center:', this.nextEvent);
             this.timeCircle.centerInfo.append('text')
                 .attr('class', 'calculation-info')
                 .attr('y', 85)
@@ -254,7 +279,6 @@ class SunMoonApp {
                 .attr('y', 100)
                 .text(`${this.calculations.formatTimeUntilEvent(this.nextEvent.daysUntil)}`);
         } else {
-            console.log('No next event found to display');
         }
     }
     
@@ -359,6 +383,202 @@ class SunMoonApp {
         }, AppConfig.TIMEOUTS.STATUS_CLEAR);
     }
     
+    setupCrossTabCoordination() {
+        // Generate unique tab ID
+        this.tabId = 'tab_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+        
+        // Register this tab as active
+        this.registerTab();
+        
+        // Listen for localStorage changes from other tabs
+        window.addEventListener('storage', (e) => {
+            if (e.key === 'sun-moon-data' && e.newValue) {
+                try {
+                    const data = JSON.parse(e.newValue);
+                    this.handleSharedDataUpdate(data);
+                } catch (error) {
+                    console.error('Error parsing shared data:', error);
+                }
+            }
+        });
+        
+        // Clean up when tab is closed/refreshed
+        window.addEventListener('beforeunload', () => {
+            this.unregisterTab();
+        });
+        
+        // Periodic cleanup of stale tabs
+        setInterval(() => {
+            this.cleanupStaleTabs();
+        }, 30000); // Every 30 seconds
+    }
+    
+    registerTab() {
+        const activeTabs = JSON.parse(localStorage.getItem('sun-moon-active-tabs') || '{}');
+        activeTabs[this.tabId] = {
+            timestamp: Date.now(),
+            isLeader: Object.keys(activeTabs).length === 0 // First tab becomes leader
+        };
+        localStorage.setItem('sun-moon-active-tabs', JSON.stringify(activeTabs));
+    }
+    
+    unregisterTab() {
+        const activeTabs = JSON.parse(localStorage.getItem('sun-moon-active-tabs') || '{}');
+        delete activeTabs[this.tabId];
+        localStorage.setItem('sun-moon-active-tabs', JSON.stringify(activeTabs));
+        
+        // If this was the leader, promote another tab
+        if (Object.keys(activeTabs).length > 0) {
+            const oldestTab = Object.keys(activeTabs).sort()[0];
+            activeTabs[oldestTab].isLeader = true;
+            localStorage.setItem('sun-moon-active-tabs', JSON.stringify(activeTabs));
+        }
+    }
+    
+    cleanupStaleTabs() {
+        const activeTabs = JSON.parse(localStorage.getItem('sun-moon-active-tabs') || '{}');
+        const now = Date.now();
+        let hasChanges = false;
+        
+        // Remove tabs that haven't updated in 2 minutes
+        Object.keys(activeTabs).forEach(tabId => {
+            if (now - activeTabs[tabId].timestamp > 120000) {
+                delete activeTabs[tabId];
+                hasChanges = true;
+            }
+        });
+        
+        if (hasChanges) {
+            localStorage.setItem('sun-moon-active-tabs', JSON.stringify(activeTabs));
+            
+            // Ensure there's always a leader
+            if (Object.keys(activeTabs).length > 0 && !Object.values(activeTabs).some(tab => tab.isLeader)) {
+                const oldestTab = Object.keys(activeTabs).sort()[0];
+                activeTabs[oldestTab].isLeader = true;
+                localStorage.setItem('sun-moon-active-tabs', JSON.stringify(activeTabs));
+            }
+        }
+        
+        // Update this tab's timestamp
+        activeTabs[this.tabId] = {
+            timestamp: now,
+            isLeader: activeTabs[this.tabId]?.isLeader || false
+        };
+        localStorage.setItem('sun-moon-active-tabs', JSON.stringify(activeTabs));
+    }
+    
+    isTabLeader() {
+        const activeTabs = JSON.parse(localStorage.getItem('sun-moon-active-tabs') || '{}');
+        const isLeader = activeTabs[this.tabId]?.isLeader || false;
+        console.log(`Tab ${this.tabId}: Leader check result: ${isLeader}`);
+        return isLeader;
+    }
+    
+    getRecentSharedData() {
+        try {
+            const sharedData = localStorage.getItem('sun-moon-data');
+            if (sharedData) {
+                const data = JSON.parse(sharedData);
+                // Consider data recent if it's less than 5 minutes old
+                if (Date.now() - data.timestamp < 300000) {
+                    return data;
+                }
+            }
+        } catch (error) {
+            console.warn('Error getting recent shared data:', error);
+        }
+        return null;
+    }
+    
+    promoteToLeader() {
+        const activeTabs = JSON.parse(localStorage.getItem('sun-moon-active-tabs') || '{}');
+        if (activeTabs[this.tabId]) {
+            activeTabs[this.tabId].isLeader = true;
+            localStorage.setItem('sun-moon-active-tabs', JSON.stringify(activeTabs));
+            console.log(`Tab ${this.tabId}: Promoted to leader`);
+        }
+    }
+    
+    shareDataWithOtherTabs(data) {
+        // Store data in localStorage for other tabs
+        // Note: JSON.stringify converts Date objects to strings, so we need to handle this
+        localStorage.setItem('sun-moon-data', JSON.stringify({
+            ...data,
+            timestamp: Date.now(),
+            tabId: this.tabId
+        }));
+    }
+    
+    handleSharedDataUpdate(data) {
+        // Only update if data is from another tab and is recent, or if called directly
+        if (!data.tabId || data.tabId !== this.tabId) {
+            console.log(`Tab ${this.tabId}: Received shared data from another tab`);
+            
+            // Convert date strings back to Date objects (they get serialized as strings in localStorage)
+            const processedData = this.deserializeDateObjects(data);
+            this.currentData = processedData;
+            
+            // Update the visualization with shared data without making new API calls
+            if (this.timeCircle && processedData.sun && processedData.moon && processedData.uv) {
+                console.log(`Tab ${this.tabId}: Updating UI with shared data`);
+                this.timeCircle.updateSunData(processedData.sun);
+                this.timeCircle.updateMoonData(processedData.moon);
+                this.timeCircle.updateUVData(processedData.uv);
+                
+                // Update center display with shared data
+                this.updateCenterDisplay(processedData);
+                
+                // Update location display
+                this.updateLocationDisplay(processedData.location);
+                
+                // Update status
+                this.updateStatus('Updated from shared data');
+                
+                // Calculate additional information
+                this.calculateExtendedInfo();
+            }
+        }
+    }
+    
+    deserializeDateObjects(data) {
+        // Convert date strings back to Date objects
+        const processed = JSON.parse(JSON.stringify(data)); // Deep copy
+        
+        // Convert sun data dates
+        if (processed.sun) {
+            if (processed.sun.sunrise) processed.sun.sunrise = new Date(processed.sun.sunrise);
+            if (processed.sun.sunset) processed.sun.sunset = new Date(processed.sun.sunset);
+            if (processed.sun.solarNoon) processed.sun.solarNoon = new Date(processed.sun.solarNoon);
+        }
+        
+        // Convert moon data dates
+        if (processed.moon) {
+            if (processed.moon.moonrise) processed.moon.moonrise = new Date(processed.moon.moonrise);
+            if (processed.moon.moonset) processed.moon.moonset = new Date(processed.moon.moonset);
+        }
+        
+        // Convert UV data dates
+        if (processed.uv && processed.uv.hourly) {
+            processed.uv.hourly.forEach(uvHour => {
+                if (uvHour.time) uvHour.time = new Date(uvHour.time);
+            });
+        }
+        
+        if (processed.uv && processed.uv.grouped) {
+            processed.uv.grouped.forEach(uvGroup => {
+                if (uvGroup.startTime) uvGroup.startTime = new Date(uvGroup.startTime);
+                if (uvGroup.endTime) uvGroup.endTime = new Date(uvGroup.endTime);
+                if (uvGroup.hours) {
+                    uvGroup.hours.forEach(hour => {
+                        if (hour.time) hour.time = new Date(hour.time);
+                    });
+                }
+            });
+        }
+        
+        return processed;
+    }
+    
     updateLocationDisplay(location) {
         const locationElement = document.getElementById('location-display');
         if (!location) {
@@ -387,12 +607,10 @@ class SunMoonApp {
      * Handle date changes from the year circle
      */
     async handleDateChange(selectedDate) {
-        console.log('Date changed to:', selectedDate);
         
         try {
             // Check if we're returning to current date
             if (this.isCurrentDate(selectedDate)) {
-                console.log('Returned to current date, switching to current date mode');
                 // Reload current data and switch to regular current date display
                 await this.loadAstronomicalData();
                 return;
@@ -400,7 +618,6 @@ class SunMoonApp {
             
             // Get astronomical data for the selected date
             const data = await this.api.getExtendedAstronomicalDataForDate(selectedDate);
-            console.log('Astronomical data loaded for selected date:', data);
             this.currentData = data;
             
             // Update the circles with new data
@@ -434,7 +651,6 @@ class SunMoonApp {
         
         // Get next equinox/solstice from the selected date
         this.nextEvent = this.calculations.getNextEquinoxOrSolstice(date);
-        console.log('Next equinox/solstice from selected date:', this.nextEvent);
     }
     
     /**
@@ -582,30 +798,25 @@ class SunMoonApp {
      * Handle debounced date changes for expensive operations like same day length calculation
      */
     async handleDateChangeDebounced(selectedDate) {
-        console.log('Debounced date change triggered for:', selectedDate);
         
         try {
             // Check if we're still on the same selected date and it's not current date
             if (this.isCurrentDate(selectedDate) || 
                 selectedDate.toDateString() !== this.timeCircle.selectedDate.toDateString()) {
-                console.log('Date changed or returned to current date, skipping debounced operation');
                 return;
             }
             
-            console.log('Performing expensive calculations for selected date:', selectedDate.toDateString());
             
             // Calculate same day length for selected date (expensive operation)
             if (this.currentData && this.currentData.sun) {
                 const dayLength = this.calculations.calculateDayLength(this.currentData.sun);
                 
                 if (dayLength) {
-                    console.log('Calculating matching day length for selected date:', selectedDate, dayLength);
                     this.matchingDayLength = await this.calculations.findMatchingDayLength(
                         dayLength,
                         this.currentData.location,
                         selectedDate
                     );
-                    console.log('Found matching day length for selected date:', this.matchingDayLength);
                 } else {
                     this.matchingDayLength = null;
                 }
@@ -615,7 +826,6 @@ class SunMoonApp {
             if (selectedDate.toDateString() === this.timeCircle.selectedDate.toDateString() &&
                 !this.isCurrentDate(selectedDate)) {
                 this.updateCenterDisplayForDate(selectedDate);
-                console.log('Updated center display with debounced calculations');
             }
             
         } catch (error) {
