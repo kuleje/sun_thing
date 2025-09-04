@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16">
+  <!-- Dark background -->
+  <rect width="16" height="16" fill="#1a1a2e"/>
+  
+  <!-- Sun (left half) -->
+  <circle cx="6" cy="8" r="3" fill="#ffd700"/>
+  <rect x="0" y="0" width="8" height="16" fill="#ffd700" opacity="0.3"/>
+  
+  <!-- Moon (right half) -->
+  <circle cx="10" cy="8" r="3" fill="#e8e8e8"/>
+  <circle cx="11" cy="7" r="2.2" fill="#1a1a2e"/>
+  
+  <!-- Center line -->
+  <line x1="8" y1="2" x2="8" y2="14" stroke="#666" stroke-width="0.5"/>
+</svg>
