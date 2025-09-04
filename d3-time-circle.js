@@ -232,11 +232,9 @@ class TimeCircle {
     
     renderSunArcs() {
         if (!this.sunData) {
-            console.log('No sun data available for rendering');
             return;
         }
         
-        console.log('Rendering sun arcs with data:', this.sunData);
         
         const arcGenerator = d3.arc()
             .innerRadius(this.innerRadius)
@@ -247,7 +245,6 @@ class TimeCircle {
         
         // Handle polar regions where sun may not rise/set
         if (!this.sunData.sunrise || !this.sunData.sunset) {
-            console.log('Polar region detected - no sunrise/sunset times');
             
             // Create full circle arc for polar day/night conditions
             const fullCircleArc = arcGenerator({ startAngle: 0, endAngle: 2 * Math.PI });
@@ -271,14 +268,6 @@ class TimeCircle {
         const sunriseHour = this.sunData.sunrise.getHours() + this.sunData.sunrise.getMinutes() / 60;
         const sunsetHour = this.sunData.sunset.getHours() + this.sunData.sunset.getMinutes() / 60;
         
-        console.log('Sun arc calculation:', {
-            sunrise: this.sunData.sunrise,
-            sunset: this.sunData.sunset,
-            sunriseHour: sunriseHour,
-            sunsetHour: sunsetHour,
-            sunriseAngle: this.hourToAngle(sunriseHour) * 180 / Math.PI,
-            sunsetAngle: this.hourToAngle(sunsetHour) * 180 / Math.PI
-        });
         
         // GPT-5's approach for sun/moon arcs
         
@@ -385,11 +374,9 @@ class TimeCircle {
     
     renderMoonArcs() {
         if (!this.moonData) {
-            console.log('No moon data available for rendering');
             return;
         }
         
-        console.log('Rendering moon arcs with data:', this.moonData);
         
         const arcGenerator = d3.arc()
             .innerRadius(this.middleRadius + 10)
@@ -581,29 +568,20 @@ class TimeCircle {
     
     showUVArcs() {
         if (!this.uvData || !this.sunData) {
-            console.log('No UV or sun data available for UV arc rendering');
             return;
         }
         
         // Only show UV arcs for current date - UV data is not accurate for historical/future dates
         const today = new Date();
         if (this.selectedDate.toDateString() !== today.toDateString()) {
-            console.log('UV arcs disabled for non-current dates');
             return;
         }
         
-        console.log('Showing UV arcs with data:', this.uvData);
         
         // Debug: Log location and timing information
-        console.log('Location & Timing Debug:');
-        console.log('  Current local time:', new Date().toLocaleString());
-        console.log('  Current local hour:', new Date().getHours());
-        console.log('  User location coordinates:', JSON.stringify(window.sunMoonApp?.api?.userLocation || 'Not available'));
-        console.log('  Sun data times - Sunrise:', this.sunData?.sunrise?.toLocaleString(), 'Sunset:', this.sunData?.sunset?.toLocaleString());
         
         // Hide the solar arc to be replaced by UV arcs
         const dayArcElement = this.sunLayer.select('.day-arc');
-        console.log('Day arc element found for hiding:', !dayArcElement.empty());
         
         dayArcElement
             .transition()
@@ -615,7 +593,6 @@ class TimeCircle {
         
         // Use grouped UV data instead of individual hourly data
         const groupedUVData = this.uvData.grouped || [];
-        console.log('Grouped UV data:', groupedUVData);
         
         if (groupedUVData.length === 0) {
             console.warn('No grouped UV data available');
@@ -628,16 +605,6 @@ class TimeCircle {
             const startHour = uvGroup.startHour;
             const endHour = uvGroup.endHour;
             
-            // Debug UV positioning
-            console.log(`UV Group ${index}:`, {
-                uvIndex: uvGroup.uvIndex,
-                timeRange: `${uvGroup.startTime.getHours()}:00-${uvGroup.endTime.getHours()}:00`,
-                hourCount: uvGroup.hours.length,
-                startHour: startHour,
-                endHour: endHour,
-                startAngle: this.hourToAngle(startHour) * 180 / Math.PI,
-                endAngle: this.hourToAngle(endHour) * 180 / Math.PI
-            });
             
             // Add minimal padding between UV segments to reduce gaps
             const segmentPadding = 0.005; // Very small gap between segments (in hour units)
@@ -646,14 +613,6 @@ class TimeCircle {
             
             const uvAngles = this.spanToAngles(paddedStartHour, paddedEndHour);
             
-            // Enhanced debugging: Log D3 arc angles in degrees for comparison
-            console.log(`UV Arc ${index} D3 Angles:`, {
-                startAngleDegrees: uvAngles.startAngle * 180 / Math.PI,
-                endAngleDegrees: uvAngles.endAngle * 180 / Math.PI,
-                startAngleRadians: uvAngles.startAngle,
-                endAngleRadians: uvAngles.endAngle,
-                hourSpan: `${paddedStartHour.toFixed(2)} to ${paddedEndHour.toFixed(2)}`
-            });
             
             // Calculate dynamic radius based on UV index using structured min/max approach
             const baseInnerRadius = this.innerRadius;
@@ -666,15 +625,6 @@ class TimeCircle {
             
             // Calculate outer radius based on UV index with structured scaling
             const uvOuterRadius = minRadius + (stepSize * uvGroup.uvIndex);
-            
-            console.log(`UV Arc ${index} Width Calculation:`, {
-                uvIndex: uvGroup.uvIndex,
-                minRadius: minRadius,
-                maxRadius: maxRadius,
-                stepSize: stepSize,
-                calculatedOuterRadius: uvOuterRadius,
-                actualWidth: uvOuterRadius - baseInnerRadius
-            });
             
             // Position UV arcs starting from inner radius
             const arcGenerator = d3.arc()
@@ -740,7 +690,6 @@ class TimeCircle {
     hideUVArcs() {
         // Restore the solar arc
         const dayArcElement = this.sunLayer.select('.day-arc');
-        console.log('Day arc element found for restoring:', !dayArcElement.empty());
         
         dayArcElement
             .transition()

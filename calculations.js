@@ -144,7 +144,6 @@ class AstronomicalCalculations {
         const today = referenceDate || new Date();
         const currentDayOfYear = this.getDayOfYear(today);
         
-        console.log('Searching for closest matching day length:', {
             targetMinutes,
             currentDayLength,
             userLocation
@@ -152,7 +151,6 @@ class AstronomicalCalculations {
         
         // Find the next solstice to determine when the seasonal direction changes
         const nextSolstice = this.getNextSolstice(today);
-        console.log('Next solstice:', nextSolstice);
         
         // Search only after the next solstice (when seasonal direction changes)
         let closestMatch = null;
@@ -164,7 +162,6 @@ class AstronomicalCalculations {
         searchStartDate.setDate(searchStartDate.getDate() + 1);
         const daysUntilSearchStart = Math.ceil((searchStartDate - today) / AppConfig.ASTRONOMY.DAY_TO_MS);
         
-        console.log(`Searching after next solstice (${nextSolstice.name}), starting ${daysUntilSearchStart} days from now...`);
         
         // Search for up to 185 days after the solstice (just over 6 months)
         for (let daysAfterSolstice = 1; daysAfterSolstice <= 185; daysAfterSolstice++) {
@@ -188,17 +185,14 @@ class AstronomicalCalculations {
                 
                 // Log good matches for debugging
                 if (difference <= 10) {
-                    console.log(`Good match found: ${testDate.toDateString()}, dayLength: ${testDayLength.totalMinutes}min, diff: ${difference}min`);
                 }
             }
             
             // Log first few checks for debugging
             if (checkedDates <= 5) {
-                console.log(`Check ${checkedDates} (${daysAhead} days): ${testDate.toDateString()}, dayLength: ${testDayLength.totalMinutes}min, diff: ${difference}min`);
             }
         }
         
-        console.log(`Checked ${checkedDates} dates. Best match: ${closestMatch ? closestMatch.date.toDateString() : 'none'} (${smallestDifference.toFixed(1)} min difference)`);
         return closestMatch;
     }
     
