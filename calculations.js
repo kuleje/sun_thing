@@ -144,11 +144,6 @@ class AstronomicalCalculations {
         const today = referenceDate || new Date();
         const currentDayOfYear = this.getDayOfYear(today);
         
-            targetMinutes,
-            currentDayLength,
-            userLocation
-        });
-        
         // Find the next solstice to determine when the seasonal direction changes
         const nextSolstice = this.getNextSolstice(today);
         
